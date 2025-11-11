@@ -28,7 +28,7 @@ class HGEZLPFCR_API_Client {
         $token = $this->get_auth_token();
         if (!$token) {
             HGEZLPFCR_Logger::error('Could not get authentication token');
-            return new WP_Error('hgezlpfcr_auth_failed', 'Nu s-a putut obține token-ul de autentificare');
+            return new WP_Error('hgezlpfcr_auth_failed', 'Could not obtain authentication token');
         }
 
         // Add domain to all eCommerce API requests
@@ -73,7 +73,7 @@ class HGEZLPFCR_API_Client {
                         $args['headers']['Authorization'] = 'Bearer ' . $new_token;
                         continue;
                     } else {
-                        return new WP_Error('hgezlpfcr_auth_failed', 'Token-ul a expirat și nu s-a putut regenera', ['code'=>$code]);
+                        return new WP_Error('hgezlpfcr_auth_failed', 'Token expired and could not be regenerated', ['code'=>$code]);
                     }
                 }
 
@@ -89,7 +89,7 @@ class HGEZLPFCR_API_Client {
                 }
                 // 429/5xx => retry
                 if (!in_array($code, [429,500,502,503,504], true)) {
-                    return new WP_Error('hgezlpfcr_http_'.$code, 'Eroare API FanCourier eCommerce', ['response' => $raw, 'code'=>$code]);
+                    return new WP_Error('hgezlpfcr_http_'.$code, 'FanCourier eCommerce API Error', ['response' => $raw, 'code'=>$code]);
                 }
                 HGEZLPFCR_Logger::error('API transient error, retrying', ['code'=>$code, 'attempt'=>$attempt]);
             } else {
@@ -99,7 +99,7 @@ class HGEZLPFCR_API_Client {
             $delay_ms = min($delay_ms * 2, 2000);
         } while ($attempt <= $this->retries);
 
-        return is_wp_error($res) ? $res : new WP_Error('hgezlpfcr_api_failed', 'Nu s-a putut comunica cu API FanCourier după retry.');
+        return is_wp_error($res) ? $res : new WP_Error('hgezlpfcr_api_failed', 'Could not communicate with FanCourier API after retry.');
     }
 
     protected function post(string $url, array $body, array $headers = [], ?string $idempotency_key = null) {
@@ -107,7 +107,7 @@ class HGEZLPFCR_API_Client {
         $token = $this->get_auth_token();
         if (!$token) {
             HGEZLPFCR_Logger::error('Could not get authentication token');
-            return new WP_Error('hgezlpfcr_auth_failed', 'Nu s-a putut obține token-ul de autentificare');
+            return new WP_Error('hgezlpfcr_auth_failed', 'Could not obtain authentication token');
         }
 
         $args = [
@@ -156,7 +156,7 @@ class HGEZLPFCR_API_Client {
                 }
                 // 429/5xx => retry
                 if (!in_array($code, [429,500,502,503,504], true)) {
-                    return new WP_Error('hgezlpfcr_http_'.$code, 'Eroare API FanCourier', ['response' => $data, 'code'=>$code]);
+                    return new WP_Error('hgezlpfcr_http_'.$code, 'FanCourier API Error', ['response' => $data, 'code'=>$code]);
                 }
                 HGEZLPFCR_Logger::error('API transient error, retrying', ['code'=>$code, 'attempt'=>$attempt]);
             } else {
@@ -166,7 +166,7 @@ class HGEZLPFCR_API_Client {
             $delay_ms = min($delay_ms * 2, 2000);
         } while ($attempt <= $this->retries);
 
-        return is_wp_error($res) ? $res : new WP_Error('hgezlpfcr_api_failed', 'Nu s-a putut comunica cu API FanCourier după retry.');
+        return is_wp_error($res) ? $res : new WP_Error('hgezlpfcr_api_failed', 'Could not communicate with FanCourier API after retry.');
     }
 
     protected function get(string $url, array $headers = []) {
@@ -174,7 +174,7 @@ class HGEZLPFCR_API_Client {
         $token = $this->get_auth_token();
         if (!$token) {
             HGEZLPFCR_Logger::error('Could not get authentication token');
-            return new WP_Error('hgezlpfcr_auth_failed', 'Nu s-a putut obține token-ul de autentificare');
+            return new WP_Error('hgezlpfcr_auth_failed', 'Could not obtain authentication token');
         }
 
         $args = [
@@ -207,7 +207,7 @@ class HGEZLPFCR_API_Client {
                         // Retry with new token
                         continue;
                     } else {
-                        return new WP_Error('hgezlpfcr_auth_failed', 'Token-ul a expirat și nu s-a putut regenera', ['code'=>$code]);
+                        return new WP_Error('hgezlpfcr_auth_failed', 'Token expired and could not be regenerated', ['code'=>$code]);
                     }
                 }
 
@@ -223,7 +223,7 @@ class HGEZLPFCR_API_Client {
                 }
                 // 429/5xx => retry
                 if (!in_array($code, [429,500,502,503,504], true)) {
-                    return new WP_Error('hgezlpfcr_http_'.$code, 'Eroare API FanCourier', ['code'=>$code]);
+                    return new WP_Error('hgezlpfcr_http_'.$code, 'FanCourier API Error', ['code'=>$code]);
                 }
                 HGEZLPFCR_Logger::error('API transient error, retrying', ['code'=>$code, 'attempt'=>$attempt]);
             } else {
@@ -233,7 +233,7 @@ class HGEZLPFCR_API_Client {
             $delay_ms = min($delay_ms * 2, 2000);
         } while ($attempt <= $this->retries);
 
-        return is_wp_error($res) ? $res : new WP_Error('hgezlpfcr_api_failed', 'Nu s-a putut comunica cu API FanCourier după retry.');
+        return is_wp_error($res) ? $res : new WP_Error('hgezlpfcr_api_failed', 'Could not communicate with FanCourier API after retry.');
     }
 
     /**
@@ -285,7 +285,7 @@ class HGEZLPFCR_API_Client {
                         $args['headers']['Authorization'] = 'Bearer ' . $new_token;
                         continue;
                     } else {
-                        return new WP_Error('hgezlpfcr_auth_failed', 'Token-ul a expirat și nu s-a putut regenera. Verificați credențialele (username/parolă).', ['code'=>$code]);
+                        return new WP_Error('hgezlpfcr_auth_failed', 'Token expired and could not be regenerated. Please verify credentials (username/password).', ['code'=>$code]);
                     }
                 }
 
@@ -311,7 +311,7 @@ class HGEZLPFCR_API_Client {
             $delay_ms = min($delay_ms * 2, 2000);
         } while ($attempt <= $this->retries);
 
-        return is_wp_error($res) ? $res : new WP_Error('hgezlpfcr_api_failed', 'Nu s-a putut comunica cu API FanCourier după retry.');
+        return is_wp_error($res) ? $res : new WP_Error('hgezlpfcr_api_failed', 'Could not communicate with FanCourier API after retry.');
     }
 
     /**
@@ -372,7 +372,7 @@ class HGEZLPFCR_API_Client {
                 }
                 // 429/5xx => retry
                 if (!in_array($code, [429,500,502,503,504], true)) {
-                    return new WP_Error('hgezlpfcr_http_'.$code, 'Eroare API FanCourier', ['response' => $data, 'code'=>$code]);
+                    return new WP_Error('hgezlpfcr_http_'.$code, 'FanCourier API Error', ['response' => $data, 'code'=>$code]);
                 }
                 HGEZLPFCR_Logger::error('Old API transient error, retrying', ['code'=>$code, 'attempt'=>$attempt]);
             } else {
@@ -382,7 +382,7 @@ class HGEZLPFCR_API_Client {
             $delay_ms = min($delay_ms * 2, 2000);
         } while ($attempt <= $this->retries);
 
-        return is_wp_error($res) ? $res : new WP_Error('hgezlpfcr_api_failed', 'Nu s-a putut comunica cu API FanCourier după retry.');
+        return is_wp_error($res) ? $res : new WP_Error('hgezlpfcr_api_failed', 'Could not communicate with FanCourier API after retry.');
     }
 
     /** Load cached token from WordPress options */
@@ -596,15 +596,15 @@ class HGEZLPFCR_API_Client {
         $client_id = HGEZLPFCR_Settings::get('hgezlpfcr_client', '');
         if (empty($client_id)) {
             HGEZLPFCR_Logger::error('Client ID not configured for PDF download', ['awb' => $awb]);
-            return new WP_Error('fc_config_error', 'Client ID nu este configurat');
+            return new WP_Error('fc_config_error', 'Client ID is not configured');
         }
 
         $endpoint = 'https://api.fancourier.ro/awb/label?' . http_build_query([
             'clientId' => $client_id,
             'awbs[]' => $awb,
-            'awbs[]' => $awb, // AWB duplicat pentru a afișa de 2 ori
+            'awbs[]' => $awb, // Duplicate AWB to display twice
             'pdf' => '1',
-            'format' => 'A4', // Format A4 pentru pagina
+            'format' => 'A4', // A4 format for page
             'dpi' => '300'
         ]);
 
@@ -621,7 +621,7 @@ class HGEZLPFCR_API_Client {
         $client_id = HGEZLPFCR_Settings::get('hgezlpfcr_client', '');
         if (empty($client_id)) {
             HGEZLPFCR_Logger::error('Client ID not configured for status check', ['awb' => $awb]);
-            return new WP_Error('fc_config_error', 'Client ID nu este configurat');
+            return new WP_Error('fc_config_error', 'Client ID is not configured');
         }
 
         $endpoint = 'https://api.fancourier.ro/reports/awb/tracking?' . http_build_query([
@@ -646,7 +646,7 @@ class HGEZLPFCR_API_Client {
         $client_id = HGEZLPFCR_Settings::get('hgezlpfcr_client', '');
         if (empty($client_id)) {
             HGEZLPFCR_Logger::error('Client ID not configured for AWB existence check', ['awb' => $awb]);
-            return new WP_Error('fc_config_error', 'Client ID nu este configurat');
+            return new WP_Error('fc_config_error', 'Client ID is not configured');
         }
         
         // Use current date adjusted for FanCourier timezone if generation date is not provided
@@ -708,8 +708,8 @@ class HGEZLPFCR_API_Client {
                 // If 404 or "no data" errors, try next format
                 if ($error_code === 'fc_http_404' || 
                     strpos(strtolower($error_message), 'no data') !== false ||
-                    strpos(strtolower($error_message), 'nu există date') !== false ||
-                    strpos(strtolower($error_message), 'fără date') !== false) {
+                    strpos(strtolower($error_message), 'no data') !== false ||
+                    strpos(strtolower($error_message), 'without data') !== false) {
                     continue; // Try next date format
                 }
                 
@@ -839,7 +839,7 @@ class HGEZLPFCR_API_Client {
         }
 
         HGEZLPFCR_Logger::error('Invalid tariff response', ['response' => $response]);
-        return new WP_Error('fc_tariff_error', 'Răspuns invalid de la API pentru tarif');
+        return new WP_Error('fc_tariff_error', 'Invalid response from API for tariff');
     }
     
     public function check_service(array $params) {

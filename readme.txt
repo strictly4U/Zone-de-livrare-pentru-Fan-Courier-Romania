@@ -1,7 +1,7 @@
-=== Zone de livrare pentru Fan Courier Romania ===
-Contributors: hurubarugeorge
+=== HgE: Shipping Zones for FAN Courier Romania ===
+Contributors: hge321, hurubarugeorge
 Donate link: https://www.linkedin.com/in/hurubarugeorgesemanuel/
-Tags: zone de livare, romania, fan courier, woocommerce
+Tags: shipping zones, romania, fan courier, woocommerce, awb
 Requires at least: 5.0
 Tested up to: 6.8
 Requires PHP: 8.1
@@ -9,11 +9,11 @@ Stable tag: 1.0.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Complete FAN Courier integration for WooCommerce with automatic AWB generation, PDF labels, real-time tracking, and dynamic shipping rates.
+Standard FAN Courier integration for WooCommerce with automatic AWB generation, PDF labels, real-time tracking, and dynamic shipping rates.
 
 == Description ==
 
-**FanCourier Complete** is a professional WordPress plugin that provides seamless integration between WooCommerce and FAN Courier shipping services in Romania. Generate AWB labels automatically, calculate shipping costs in real-time, and track packages directly from your WordPress admin.
+**HgE: Shipping Zones for FAN Courier Romania** is a professional WordPress plugin that provides seamless integration between WooCommerce and FAN Courier shipping services in Romania. Generate AWB labels automatically, calculate shipping costs in real-time, and track packages directly from your WordPress admin.
 
 = Key Features =
 
@@ -82,7 +82,7 @@ Complete FAN Courier integration for WooCommerce with automatic AWB generation, 
 
 1. Log in to your WordPress admin panel
 2. Navigate to **Plugins > Add New**
-3. Search for "FanCourier Complete"
+3. Search for "FAN Courier Shipping Zones for Romania"
 4. Click **Install Now** and then **Activate**
 5. Go to **WooCommerce > Settings > Fan Courier** to configure
 
@@ -188,7 +188,7 @@ Enable "Debug log" in plugin settings, then view logs at:
 
 = Can I use this with other shipping plugins? =
 
-Yes, FanCourier Complete works alongside other WooCommerce shipping plugins.
+Yes, FAN Courier Shipping Zones for Romania works alongside other WooCommerce shipping plugins.
 
 = What if I have multiple sender locations? =
 
@@ -274,15 +274,63 @@ This plugin:
 * Logs IP addresses for security purposes (can be disabled)
 * Does not use cookies on the frontend
 
-= API Usage =
+= External Services =
 
-This plugin communicates with FAN Courier eCommerce API at `https://ecommerce.fancourier.ro/` for:
-* Authentication and token management
-* Shipping rate calculation
-* AWB generation and management
-* Package tracking status updates
+This plugin relies on external FAN Courier API services to provide shipping functionality. Data is transmitted to these third-party services as described below:
 
-FAN Courier Privacy Policy: https://www.fancourier.ro/termeni-conditii/
+**FAN Courier eCommerce API** (`https://ecommerce.fancourier.ro/`)
+
+Used for:
+* Authentication and authorization token generation
+* Real-time shipping rate calculation based on destination and package details
+* Service availability checking for specific locations
+
+Data sent:
+* Authentication: `/authShop` - Client credentials (username, password, client ID), website domain
+* Rate calculation: `/get-tariff` - Destination address, package weight, dimensions, declared value, website domain
+* Service availability: `/check-service` - Destination locality, website domain
+
+When data is sent:
+* During plugin configuration (credential verification)
+* When customers view cart/checkout pages (shipping rate calculation)
+* When checking service availability for customer addresses
+
+**FAN Courier REST API** (`https://api.fancourier.ro/`)
+
+Used for:
+* JWT authentication for API access
+* AWB (shipping label) generation and management
+* PDF label generation for printing
+* Real-time package tracking and status updates
+* AWB reports and history
+
+Data sent:
+* Authentication: `/login` - Client credentials (username, password)
+* AWB generation: `/intern-awb` - Sender details (name, address, contact), recipient details (name, address, phone), package details (weight, dimensions, contents), payment information (COD amount, bank account), delivery instructions
+* Label download: `/awb/label` - AWB number, client ID
+* Tracking: `/reports/awb/tracking` - AWB number, client ID
+* AWB reports: `/reports/awb` - Client ID, date range for reports
+
+When data is sent:
+* During plugin configuration (credential verification)
+* When store admin generates AWB labels (manual or automatic)
+* When downloading PDF labels for shipping
+* During automated tracking synchronization (scheduled background task)
+* When viewing AWB history and reports
+
+**Legal Information**
+
+By using this plugin, you acknowledge that customer and order data will be transmitted to FAN Courier's servers for shipping purposes. You are responsible for ensuring compliance with applicable data protection regulations (GDPR, etc.) and obtaining necessary customer consent.
+
+* FAN Courier Terms and Conditions: https://www.fancourier.ro/termeni-conditii/
+* FAN Courier Privacy Policy: https://www.fancourier.ro/termeni-conditii/ (section "Politica de confidențialitate")
+
+**Data Security**
+
+* All API communications use HTTPS encryption
+* API credentials are stored securely in WordPress database
+* No customer data is stored on third-party servers beyond what's necessary for shipping operations
+* You can enable debug logging to monitor all API communications (disable in production for security)
 
 = Roadmap =
 

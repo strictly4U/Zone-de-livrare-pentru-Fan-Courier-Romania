@@ -27,57 +27,57 @@ class HGEZLPFCR_Settings {
 
                 public function get_settings($current_section = '') {
                     $settings = [
-                        ['title' => __('Setări Fan Courier', 'hge-zone-de-livrare-pentru-fan-courier-romania'), 'type' => 'title', 'id' => 'hgezlpfcr_section'],
-                        ['title' => 'Username',  'id' => 'hgezlpfcr_user',     'type' => 'text',     'desc' => 'Username pentru aplicația selfAWB', 'css'=>'min-width:300px'],
-                        ['title' => 'Parolă',    'id' => 'hgezlpfcr_pass',     'type' => 'password', 'desc' => 'Parolă pentru aplicația selfAWB', 'css'=>'min-width:300px'],
-                        ['title' => 'Client ID', 'id' => 'hgezlpfcr_client',   'type' => 'text',     'desc' => 'Client ID pentru API (obligatoriu pentru generarea AWB)', 'css'=>'min-width:300px'],
-                        ['title' => 'Execuție asincronă (Action Scheduler)', 'id' => 'hgezlpfcr_async', 'type' => 'checkbox', 'default' => 'yes', 'desc'=>'Recomandat pentru trafic mare'],
-                        ['title' => 'Retry API (max)', 'id' => 'hgezlpfcr_retries', 'type' => 'number', 'default' => 2, 'custom_attributes' => ['min'=>0,'max'=>5,'step'=>1]],
-                        ['title' => 'Timeout API (sec)', 'id' => 'hgezlpfcr_timeout', 'type' => 'number', 'default' => 20, 'custom_attributes' => ['min'=>5, 'step'=>1]],
-                        ['title' => 'Debug log', 'id' => 'hgezlpfcr_debug', 'type' => 'checkbox', 'default' => 'no', 'desc'=>'Loguri în WooCommerce > Status > Logs'],
-                        ['title' => 'Activează Healthcheck', 'id' => 'hgezlpfcr_enable_healthcheck', 'type' => 'checkbox', 'default' => 'no', 'desc'=>'Activează pagina de diagnosticare și verificare a setărilor plugin-ului'],
+                        ['title' => __('Fan Courier Settings', 'hge-zone-de-livrare-pentru-fan-courier-romania'), 'type' => 'title', 'id' => 'hgezlpfcr_section'],
+                        ['title' => 'Username',  'id' => 'hgezlpfcr_user',     'type' => 'text',     'desc' => 'Username for selfAWB application', 'css'=>'min-width:300px'],
+                        ['title' => 'Password',    'id' => 'hgezlpfcr_pass',     'type' => 'password', 'desc' => 'Password for selfAWB application', 'css'=>'min-width:300px'],
+                        ['title' => 'Client ID', 'id' => 'hgezlpfcr_client',   'type' => 'text',     'desc' => 'Client ID for API (required for AWB generation)', 'css'=>'min-width:300px'],
+                        ['title' => 'Asynchronous Execution (Action Scheduler)', 'id' => 'hgezlpfcr_async', 'type' => 'checkbox', 'default' => 'yes', 'desc'=>'Recommended for high traffic'],
+                        ['title' => 'API Retry (max)', 'id' => 'hgezlpfcr_retries', 'type' => 'number', 'default' => 2, 'custom_attributes' => ['min'=>0,'max'=>5,'step'=>1]],
+                        ['title' => 'API Timeout (sec)', 'id' => 'hgezlpfcr_timeout', 'type' => 'number', 'default' => 20, 'custom_attributes' => ['min'=>5, 'step'=>1]],
+                        ['title' => 'Debug log', 'id' => 'hgezlpfcr_debug', 'type' => 'checkbox', 'default' => 'no', 'desc'=>'Logs in WooCommerce > Status > Logs'],
+                        ['title' => 'Enable Healthcheck', 'id' => 'hgezlpfcr_enable_healthcheck', 'type' => 'checkbox', 'default' => 'no', 'desc'=>'Enable diagnostics and plugin settings verification page'],
                         ['type' => 'sectionend', 'id' => 'hgezlpfcr_section'],
                         
-                        ['title' => __('Setări Expeditor', 'hge-zone-de-livrare-pentru-fan-courier-romania'), 'type' => 'title', 'id' => 'hgezlpfcr_sender_section'],
-                        ['title' => 'Nume expeditor', 'id' => 'hgezlpfcr_sender_name', 'type' => 'text', 'desc' => 'Auto-completat din WooCommerce Point of Sale > Store name', 'css'=>'min-width:300px', 'default' => HGEZLPFCR_Settings::get_wc_store_name()],
-                        ['title' => 'Telefon expeditor', 'id' => 'hgezlpfcr_sender_phone', 'type' => 'text', 'desc' => 'Auto-completat din WooCommerce Point of Sale > Phone number', 'css'=>'min-width:300px', 'default' => HGEZLPFCR_Settings::get_wc_store_phone()],
-                        ['title' => 'Email expeditor', 'id' => 'hgezlpfcr_sender_email', 'type' => 'email', 'desc' => 'Auto-completat din WooCommerce Point of Sale > Email', 'css'=>'min-width:300px', 'default' => HGEZLPFCR_Settings::get_wc_store_email()],
-                        ['title' => 'Adresă expeditor', 'id' => 'hgezlpfcr_sender_address', 'type' => 'text', 'desc' => 'Auto-completat din WooCommerce Point of Sale > Physical Address', 'css'=>'min-width:300px', 'default' => HGEZLPFCR_Settings::get_wc_store_address()],
-                        ['title' => 'Oraș expeditor', 'id' => 'hgezlpfcr_sender_city', 'type' => 'text', 'desc' => 'Auto-completat din WooCommerce General > City', 'css'=>'min-width:300px', 'default' => HGEZLPFCR_Settings::get_wc_store_city()],
-                        ['title' => 'Județ expeditor', 'id' => 'hgezlpfcr_sender_county', 'type' => 'text', 'desc' => 'Auto-completat din WooCommerce General > Country/State', 'css'=>'min-width:300px', 'default' => HGEZLPFCR_Settings::get_wc_store_state()],
-                        ['title' => 'Cod poștal expeditor', 'id' => 'hgezlpfcr_sender_zip', 'type' => 'text', 'desc' => 'Auto-completat din WooCommerce General > Postcode/ZIP', 'css'=>'min-width:300px', 'default' => HGEZLPFCR_Settings::get_wc_store_postcode()],
-                        ['title' => 'Persoană de contact', 'id' => 'woocommerce_fan_courier_FAN_contactPerson', 'type' => 'text', 'desc' => 'Persoana de contact pentru expediere', 'css'=>'min-width:300px'],
-                        ['title' => 'Observații (imprimare pe AWB)', 'id' => 'woocommerce_fan_courier_FAN_obsOnAWB', 'type' => 'textarea', 'desc' => 'Observații care vor fi imprimate pe AWB', 'css'=>'min-width:300px;height:60px'],
-                        ['title' => 'Expediere colete', 'id' => 'woocommerce_fan_courier_FAN_parcelShipping', 'type' => 'select', 'desc' => 'Serviciu de expediere colete', 'options' => ['no' => 'Nu', 'yes' => 'Da'], 'default' => 'yes'],
-                                                 ['title' => 'Număr pachete/AWB', 'id' => 'woocommerce_fan_courier_FAN_numberOfParcels', 'type' => 'number', 'desc' => 'Numărul de pachete per AWB', 'default' => 1, 'custom_attributes' => ['min'=>1,'max'=>50,'step'=>1], 'css'=>'min-width:300px'],
-                         ['title' => 'Plata retur', 'id' => 'hgezlpfcr_return_payment', 'type' => 'select', 'desc' => 'Cine plătește pentru returul coletului', 'options' => ['sender' => 'Expeditor', 'recipient' => 'Destinatar'], 'default' => 'recipient'],
-                         ['title' => 'Document de plată', 'id' => 'hgezlpfcr_document_type', 'type' => 'select', 'desc' => 'Tipul documentului de plată pentru AWB', 'options' => ['document' => 'FACTURA', 'non document' => 'Chitanță'], 'default' => 'document'],
+                        ['title' => __('Sender Settings', 'hge-zone-de-livrare-pentru-fan-courier-romania'), 'type' => 'title', 'id' => 'hgezlpfcr_sender_section'],
+                        ['title' => 'Sender name', 'id' => 'hgezlpfcr_sender_name', 'type' => 'text', 'desc' => 'Auto-populated from WooCommerce Point of Sale > Store name', 'css'=>'min-width:300px', 'default' => HGEZLPFCR_Settings::get_wc_store_name()],
+                        ['title' => 'Sender phone', 'id' => 'hgezlpfcr_sender_phone', 'type' => 'text', 'desc' => 'Auto-populated from WooCommerce Point of Sale > Phone number', 'css'=>'min-width:300px', 'default' => HGEZLPFCR_Settings::get_wc_store_phone()],
+                        ['title' => 'Sender email', 'id' => 'hgezlpfcr_sender_email', 'type' => 'email', 'desc' => 'Auto-populated from WooCommerce Point of Sale > Email', 'css'=>'min-width:300px', 'default' => HGEZLPFCR_Settings::get_wc_store_email()],
+                        ['title' => 'Sender address', 'id' => 'hgezlpfcr_sender_address', 'type' => 'text', 'desc' => 'Auto-populated from WooCommerce Point of Sale > Physical Address', 'css'=>'min-width:300px', 'default' => HGEZLPFCR_Settings::get_wc_store_address()],
+                        ['title' => 'Sender city', 'id' => 'hgezlpfcr_sender_city', 'type' => 'text', 'desc' => 'Auto-populated from WooCommerce General > City', 'css'=>'min-width:300px', 'default' => HGEZLPFCR_Settings::get_wc_store_city()],
+                        ['title' => 'Sender county', 'id' => 'hgezlpfcr_sender_county', 'type' => 'text', 'desc' => 'Auto-populated from WooCommerce General > Country/State', 'css'=>'min-width:300px', 'default' => HGEZLPFCR_Settings::get_wc_store_state()],
+                        ['title' => 'Sender postal code', 'id' => 'hgezlpfcr_sender_zip', 'type' => 'text', 'desc' => 'Auto-populated from WooCommerce General > Postcode/ZIP', 'css'=>'min-width:300px', 'default' => HGEZLPFCR_Settings::get_wc_store_postcode()],
+                        ['title' => 'Contact person', 'id' => 'woocommerce_fan_courier_FAN_contactPerson', 'type' => 'text', 'desc' => 'Contact person for shipping', 'css'=>'min-width:300px'],
+                        ['title' => 'Notes (printed on AWB)', 'id' => 'woocommerce_fan_courier_FAN_obsOnAWB', 'type' => 'textarea', 'desc' => 'Notes that will be printed on AWB', 'css'=>'min-width:300px;height:60px'],
+                        ['title' => 'Parcel shipping', 'id' => 'woocommerce_fan_courier_FAN_parcelShipping', 'type' => 'select', 'desc' => 'Parcel shipping service', 'options' => ['no' => 'No', 'yes' => 'Yes'], 'default' => 'yes'],
+                                                 ['title' => 'Number of parcels/AWB', 'id' => 'woocommerce_fan_courier_FAN_numberOfParcels', 'type' => 'number', 'desc' => 'Number of parcels per AWB', 'default' => 1, 'custom_attributes' => ['min'=>1,'max'=>50,'step'=>1], 'css'=>'min-width:300px'],
+                         ['title' => 'Return payment', 'id' => 'hgezlpfcr_return_payment', 'type' => 'select', 'desc' => 'Who pays for parcel return', 'options' => ['sender' => 'Sender', 'recipient' => 'Recipient'], 'default' => 'recipient'],
+                         ['title' => 'Payment document', 'id' => 'hgezlpfcr_document_type', 'type' => 'select', 'desc' => 'Payment document type for AWB', 'options' => ['document' => 'INVOICE', 'non document' => 'Receipt'], 'default' => 'document'],
                          ['type' => 'sectionend', 'id' => 'hgezlpfcr_sender_section'],
                         
                         
-                        ['title' => __('Opțiuni Ramburs', 'hge-zone-de-livrare-pentru-fan-courier-romania'), 'type' => 'title', 'id' => 'hgezlpfcr_cod_section'],
-                        ['title' => 'Solicitare ramburs valoare marfă', 'id' => 'woocommerce_fan_courier_FAN_askForRbsGoodsValue', 'type' => 'select', 'desc' => 'Solicitare ramburs pentru valoarea mărfii', 'options' => ['no' => 'Nu', 'yes' => 'Da'], 'default' => 'yes'],
-                        ['title' => 'Adăugare taxă transport la ramburs', 'id' => 'woocommerce_fan_courier_FAN_addShipTaxToRbs', 'type' => 'select', 'desc' => 'Adăugare taxa de transport la suma de ramburs', 'options' => ['no' => 'Nu', 'yes' => 'Da'], 'default' => 'no'],
-                        ['title' => 'Solicitare ramburs în cont bancar', 'id' => 'woocommerce_fan_courier_FAN_askForRbsInBankAccount', 'type' => 'select', 'desc' => 'Rambursul să fie virat în cont bancar', 'options' => ['no' => 'Nu', 'yes' => 'Da'], 'default' => 'no'],
-                        ['title' => 'IBAN cont colector', 'id' => 'hgezlpfcr_cont_iban_ramburs', 'type' => 'text', 'desc' => 'IBAN-ul contului bancar pentru colectarea rambursului (folosit pentru comenzi cu plata la livrare)', 'css'=>'min-width:300px'],
-                        ['title' => 'Plata ramburs la destinație', 'id' => 'woocommerce_fan_courier_FAN_rbsPaymentAtDestination', 'type' => 'select', 'desc' => 'Plata rambursului la destinație', 'options' => ['no' => 'Nu', 'yes' => 'Da'], 'default' => 'yes'],
+                        ['title' => __('Cash on Delivery Options', 'hge-zone-de-livrare-pentru-fan-courier-romania'), 'type' => 'title', 'id' => 'hgezlpfcr_cod_section'],
+                        ['title' => 'Request COD for goods value', 'id' => 'woocommerce_fan_courier_FAN_askForRbsGoodsValue', 'type' => 'select', 'desc' => 'Request cash on delivery for goods value', 'options' => ['no' => 'No', 'yes' => 'Yes'], 'default' => 'yes'],
+                        ['title' => 'Add shipping cost to COD', 'id' => 'woocommerce_fan_courier_FAN_addShipTaxToRbs', 'type' => 'select', 'desc' => 'Add shipping cost to cash on delivery amount', 'options' => ['no' => 'No', 'yes' => 'Yes'], 'default' => 'no'],
+                        ['title' => 'Request COD to bank account', 'id' => 'woocommerce_fan_courier_FAN_askForRbsInBankAccount', 'type' => 'select', 'desc' => 'COD amount to be transferred to bank account', 'options' => ['no' => 'No', 'yes' => 'Yes'], 'default' => 'no'],
+                        ['title' => 'Collection account IBAN', 'id' => 'hgezlpfcr_cont_iban_ramburs', 'type' => 'text', 'desc' => 'IBAN of bank account for COD collection (used for cash on delivery orders)', 'css'=>'min-width:300px'],
+                        ['title' => 'COD payment at destination', 'id' => 'woocommerce_fan_courier_FAN_rbsPaymentAtDestination', 'type' => 'select', 'desc' => 'COD payment at destination', 'options' => ['no' => 'No', 'yes' => 'Yes'], 'default' => 'yes'],
                         ['type' => 'sectionend', 'id' => 'hgezlpfcr_cod_section'],
                     ];
 
                     // Show PRO info section only if PRO plugin is NOT active
                     if (!class_exists('FC_Pro_Settings')) {
                         $settings[] = [
-                            'title' => __('🚀 Automatizări Avansate', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
+                            'title' => __('🚀 Advanced Automations', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
                             'type' => 'title',
                             'desc' => '<div style="background: #e7f3ff; border-left: 4px solid #0073aa; padding: 15px; margin: 10px 0;">
-                                <h3 style="margin-top: 0;">Funcționalități disponibile în FanCourier PRO</h3>
-                                <p>Pentru automatizări avansate (generare AWB automată și închidere automată comenzi), vă rugăm să instalați și să activați plugin-ul <strong>FanCourier PRO</strong>.</p>
-                                <p><strong>Beneficii FanCourier PRO:</strong></p>
+                                <h3 style="margin-top: 0;">Features available in FanCourier PRO</h3>
+                                <p>For advanced automations (automatic AWB generation and automatic order completion), please install and activate the <strong>FanCourier PRO</strong> plugin.</p>
+                                <p><strong>FanCourier PRO Benefits:</strong></p>
                                 <ul style="margin-left: 20px;">
-                                    <li>✅ Generare AWB automată pentru statusuri configurabile</li>
-                                    <li>✅ Închidere automată comenzi după generare AWB</li>
-                                    <li>✅ Control complet asupra workflow-ului comenzilor</li>
-                                    <li>✅ Execuție în ordine: AWB → Închidere comandă</li>
+                                    <li>✅ Automatic AWB generation for configurable statuses</li>
+                                    <li>✅ Automatic order completion after AWB generation</li>
+                                    <li>✅ Full control over order workflow</li>
+                                    <li>✅ Sequential execution: AWB → Order completion</li>
                                 </ul>
                                 </div>',
                             'id' => 'hgezlpfcr_pro_info_section'

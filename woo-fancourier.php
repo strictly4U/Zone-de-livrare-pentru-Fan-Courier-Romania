@@ -1,9 +1,8 @@
 <?php
 /**
- * Plugin Name: Zone de livrare pentru Fan Courier Romania
+ * Plugin Name: HgE: Shipping Zones for FAN Courier Romania
  * Plugin URI: https://github.com/strictly4U/Zone-de-livrare-pentru-Fan-Courier-Romania.git
- * Description: Integrare bazată pe beneficiile Zonelor de livrare din Woocommerce pentru Fan Courier Romania (Standard). Generare manuală AWB.
- * Afișare la comandă PDF-ul cu AWB-ul. Istoric generare AWB.
+ * Description: WooCommerce shipping zones integration for FAN Courier Romania (Standard service). Manual AWB generation, PDF label display for orders, and AWB generation history.
  * Version: 1.0.2
  * Requires at least: 5.0
  * Requires PHP: 8.1
@@ -47,7 +46,7 @@ register_activation_hook(HGEZLPFCR_PLUGIN_FILE, function () {
 
 // Add Settings link in plugins list
 add_filter('plugin_action_links_' . plugin_basename(HGEZLPFCR_PLUGIN_FILE), function ($links) {
-    $settings_link = '<a href="' . admin_url('admin.php?page=wc-settings&tab=hgezlpfcr') . '">Setări</a>';
+    $settings_link = '<a href="' . admin_url('admin.php?page=wc-settings&tab=hgezlpfcr') . '">Settings</a>';
     array_unshift($links, $settings_link);
     return $links;
 });
@@ -55,8 +54,8 @@ add_filter('plugin_action_links_' . plugin_basename(HGEZLPFCR_PLUGIN_FILE), func
 // Add plugin meta links (View details, etc.)
 add_filter('plugin_row_meta', function ($plugin_meta, $plugin_file) {
     if (plugin_basename(HGEZLPFCR_PLUGIN_FILE) === $plugin_file) {
-        $plugin_meta[] = '<a href="' . admin_url('admin.php?page=wc-settings&tab=hgezlpfcr') . '">Configurare Plugin</a>';
-        $plugin_meta[] = '<a href="https://github.com/georgeshurubaru/FcRapid1923/wiki" target="_blank">Documentație</a>';
+        $plugin_meta[] = '<a href="' . admin_url('admin.php?page=wc-settings&tab=hgezlpfcr') . '">Plugin Configuration</a>';
+        $plugin_meta[] = '<a href="https://github.com/georgeshurubaru/FcRapid1923/wiki" target="_blank">Documentation</a>';
     }
     return $plugin_meta;
 }, 10, 2);
@@ -79,31 +78,36 @@ add_action('admin_notices', function () {
         }
 
         $settings_url = admin_url('admin.php?page=wc-settings&tab=hgezlpfcr');
-        ?>
-        <div class="notice notice-success is-dismissible fc-activation-notice">
-            <p>
-                <strong>✓ FanCourier Standard</strong> a fost activat cu succes!
-                <a href="<?php echo esc_url($settings_url); ?>" class="button button-primary" style="margin-left: 10px;">Configurează plugin-ul acum</a>
-            </p>
-            <p style="margin-top: 5px;">
-                <em>Introdu credențialele API (Username, Parolă, Client ID) și setările expeditorului pentru a putea genera AWB-uri.</em>
-            </p>
-        </div>
-        <script type="text/javascript">
+
+        // Enqueue inline script for notice dismissal
+        wp_enqueue_script('jquery');
+        $inline_script = "
             jQuery(document).ready(function($) {
                 $('.hgezlpfcr-activation-notice').on('click', '.notice-dismiss', function() {
-                    jQuery.post(ajaxurl, {
+                    $.post(ajaxurl, {
                         action: 'hgezlpfcr_dismiss_activation_notice'
                     });
                 });
                 // Auto-dismiss when clicking the button
                 $('.hgezlpfcr-activation-notice .button').on('click', function() {
-                    jQuery.post(ajaxurl, {
+                    $.post(ajaxurl, {
                         action: 'hgezlpfcr_dismiss_activation_notice'
                     });
                 });
             });
-        </script>
+        ";
+        wp_add_inline_script('jquery', $inline_script);
+
+        ?>
+        <div class="notice notice-success is-dismissible hgezlpfcr-activation-notice">
+            <p>
+                <strong>✓ HgE: Shipping Zones for FAN Courier Romania</strong> has been activated successfully!
+                <a href="<?php echo esc_url($settings_url); ?>" class="button button-primary" style="margin-left: 10px;">Configure plugin now</a>
+            </p>
+            <p style="margin-top: 5px;">
+                <em>Enter API credentials (Username, Password, Client ID) and sender settings to generate AWB labels.</em>
+            </p>
+        </div>
         <?php
     }
 });
@@ -130,14 +134,14 @@ add_action('admin_init', function () {
             wp_kses(
                 sprintf(
                     /* translators: 1: Plugin name, 2: Required WordPress version, 3: Current WordPress version */
-                    __('%1$s necesită WordPress %2$s sau mai nou. Versiunea ta este %3$s.', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
-                    '<strong>Zone de livrare pentru Fan Courier Romania</strong>',
+                    __('%1$s requires WordPress %2$s or newer. Your version is %3$s.', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
+                    '<strong>HgE: Shipping Zones for FAN Courier Romania</strong>',
                     $min_wp_version_safe,
                     $current_wp_version
                 ),
                 ['strong' => []]
             ),
-            esc_html__('Plugin dezactivat', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
+            esc_html__('Plugin deactivated', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
             ['back_link' => true]
         );
     }
@@ -153,14 +157,14 @@ add_action('admin_init', function () {
             wp_kses(
                 sprintf(
                     /* translators: 1: Plugin name, 2: Required PHP version, 3: Current PHP version */
-                    __('%1$s necesită PHP %2$s sau mai nou. Versiunea ta este %3$s.', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
-                    '<strong>Zone de livrare pentru Fan Courier Romania</strong>',
+                    __('%1$s requires PHP %2$s or newer. Your version is %3$s.', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
+                    '<strong>HgE: Shipping Zones for FAN Courier Romania</strong>',
                     $min_php_version_safe,
                     $current_php_version
                 ),
                 ['strong' => []]
             ),
-            esc_html__('Plugin dezactivat', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
+            esc_html__('Plugin deactivated', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
             ['back_link' => true]
         );
     }
@@ -173,8 +177,8 @@ add_action('plugins_loaded', function () {
             ?>
             <div class="notice notice-error">
                 <p>
-                    <strong><?php esc_html_e('Zone de livrare pentru Fan Courier Romania', 'hge-zone-de-livrare-pentru-fan-courier-romania'); ?></strong>
-                    <?php esc_html_e('necesită WooCommerce pentru a funcționa. Te rugăm să instalezi și să activezi WooCommerce.', 'hge-zone-de-livrare-pentru-fan-courier-romania'); ?>
+                    <strong><?php esc_html_e('HgE: Shipping Zones for FAN Courier Romania', 'hge-zone-de-livrare-pentru-fan-courier-romania'); ?></strong>
+                    <?php esc_html_e('requires WooCommerce to work. Please install and activate WooCommerce.', 'hge-zone-de-livrare-pentru-fan-courier-romania'); ?>
                 </p>
             </div>
             <?php
