@@ -322,8 +322,9 @@ When data is sent:
 
 By using this plugin, you acknowledge that customer and order data will be transmitted to FAN Courier's servers for shipping purposes. You are responsible for ensuring compliance with applicable data protection regulations (GDPR, etc.) and obtaining necessary customer consent.
 
-* FAN Courier Terms and Conditions: https://www.fancourier.ro/termeni-conditii/
-* FAN Courier Privacy Policy: https://www.fancourier.ro/termeni-conditii/ (section "Politica de confidențialitate")
+* FAN Courier General Terms and Conditions: https://www.fancourier.ro/conditii-generale-privind-furnizarea-serviciilor-postale/
+* FAN Courier Privacy Policy: https://www.fancourier.ro/politica-de-confidentialitate/
+* FAN Courier Personal Data Processing Policy: https://www.fancourier.ro/politica-de-prelucrare-a-datelor-cu-caracter-personal/
 
 **Data Security**
 
