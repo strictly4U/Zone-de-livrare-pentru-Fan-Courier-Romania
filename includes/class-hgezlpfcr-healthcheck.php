@@ -15,7 +15,7 @@ class HGEZLPFCR_Healthcheck {
         }
 
         add_action('admin_menu', [__CLASS__, 'menu'], 99);
-        add_action('admin_post_fc_hc_action', [__CLASS__, 'handle_action']);
+        add_action('admin_post_hgezlpfcr_hc_action', [__CLASS__, 'handle_action']);
 
         // Also try with a different hook to ensure it works
         add_action('woocommerce_admin_menu', [__CLASS__, 'menu']);
@@ -110,8 +110,9 @@ class HGEZLPFCR_Healthcheck {
 
             if ($pending_count > 0) {
                 echo '<p><strong>Available actions:</strong></p>';
-                echo '<form method="post" style="margin: 10px 0;">';
-                wp_nonce_field('hgezlpfcr_health_check_actions', 'hgezlpfcr_health_nonce');
+                echo '<form method="post" action="'.esc_url(admin_url('admin-post.php')).'" style="margin: 10px 0;">';
+                wp_nonce_field(self::NONCE, self::NONCE);
+                echo '<input type="hidden" name="action" value="hgezlpfcr_hc_action">';
                 echo '<button type="submit" name="hgezlpfcr_action" value="run_pending_tasks" class="button button-secondary">';
                 echo 'Force execution of pending tasks (' . absint($pending_count) . ')';
                 echo '</button>';
