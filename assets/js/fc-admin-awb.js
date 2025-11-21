@@ -65,16 +65,22 @@ jQuery(document).ready(function($) {
     $(document).on('click', '.fc-sync-awb-btn', function(e) {
         e.preventDefault();
         console.log('Sync AWB button clicked');
-        
+
         var $btn = $(this);
         var $container = $btn.closest('.hgezlpfcr-awb-actions');
         var $status = $container.find('.hgezlpfcr-awb-status');
         var orderId = $btn.data('order-id');
         var nonce = $btn.data('nonce');
-        
+
         console.log('Order ID:', orderId);
         console.log('Nonce:', nonce);
-        
+
+        // Check if button is already disabled (rate limiting in progress)
+        if ($btn.prop('disabled')) {
+            console.log('Button is disabled - rate limiting active');
+            return;
+        }
+
         // Disable button and show loading
         var originalText = $btn.text();
         $btn.prop('disabled', true).text('Sincronizare...');
@@ -94,30 +100,42 @@ jQuery(document).ready(function($) {
                 if (response.success) {
                     // Show success message
                     $status.removeClass('notice-info notice-error').addClass('notice-success').html('<p>' + response.data.message + '</p>');
-                    
+
                     // Update the container with new HTML
                     $container.html(response.data.html);
-                    
+
                     // Show success message briefly then hide
                     setTimeout(function() {
                         $status.fadeOut();
                     }, 5000);
-                    
+
                 } else {
                     // Show error message
                     $status.removeClass('notice-info notice-success').addClass('notice-error').html('<p>' + (response.data || 'Eroare la sincronizarea AWB') + '</p>');
-                    
-                    // Re-enable button
-                    $btn.prop('disabled', false).text(originalText);
+
+                    // Rate limiting: Re-enable button after 5 seconds
+                    setTimeout(function() {
+                        var $newBtn = $('.fc-sync-awb-btn[data-order-id="' + orderId + '"]');
+                        if ($newBtn.length) {
+                            $newBtn.prop('disabled', false);
+                        }
+                    }, 5000);
                 }
             },
             error: function(xhr, status, error) {
                 console.error('Sync AJAX error:', {xhr: xhr, status: status, error: error});
                 // Show error message
                 $status.removeClass('notice-info notice-success').addClass('notice-error').html('<p>Eroare la sincronizarea AWB: ' + error + '</p>');
-                
-                // Re-enable button
-                $btn.prop('disabled', false).text(originalText);
+
+                // Rate limiting: Re-enable button after 5 seconds
+                setTimeout(function() {
+                    var $newBtn = $('.fc-sync-awb-btn[data-order-id="' + orderId + '"]');
+                    if ($newBtn.length) {
+                        $newBtn.prop('disabled', false);
+                    } else {
+                        $btn.prop('disabled', false).text(originalText);
+                    }
+                }, 5000);
             }
         });
     });

@@ -171,12 +171,8 @@ add_action('admin_init', function () {
 });
 
 add_action('plugins_loaded', function () {
-    // Load plugin translations
-    load_plugin_textdomain(
-        'hge-zone-de-livrare-pentru-fan-courier-romania',
-        false,
-        dirname(plugin_basename(HGEZLPFCR_PLUGIN_FILE)) . '/languages'
-    );
+    // WordPress automatically loads plugin translations from WordPress.org since WP 4.6
+    // No need to call load_plugin_textdomain() manually
 
     if (!class_exists('WooCommerce')) {
         // Show admin notice if WooCommerce is not active

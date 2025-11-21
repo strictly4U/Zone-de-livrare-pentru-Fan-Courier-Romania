@@ -692,17 +692,25 @@ class HGEZLPFCR_Admin_Order {
     }
 
     /** AWB History logging */
-    protected static function log_awb_action($order_id, $action, $details = '') {
+    protected static function log_awb_action($order_id, $action, $details = '', $custom_user = '') {
         $order = wc_get_order($order_id);
         if (!$order) return;
-        
+
         $current_user = wp_get_current_user();
-        $user_name = $current_user->display_name ?: $current_user->user_login ?: 'System';
-        
+
+        // Use custom user name if provided, otherwise use current user
+        if (!empty($custom_user)) {
+            $user_name = $custom_user;
+            $user_id = 0; // No user ID for custom names like "Plugin-ul: HgE Fan Courier"
+        } else {
+            $user_name = $current_user->display_name ?: $current_user->user_login ?: 'System';
+            $user_id = $current_user->ID ?: 0;
+        }
+
         $history_entry = [
-            'timestamp' => time(),
+            'timestamp' => microtime(true), // Use microtime for precise ordering
             'user' => $user_name,
-            'user_id' => $current_user->ID ?: 0,
+            'user_id' => $user_id,
             'action' => $action,
             'order_status' => $order->get_status(),
             'details' => $details,
@@ -760,8 +768,11 @@ class HGEZLPFCR_Admin_Order {
 
     /** Admin button: generate AWB (queues if async enabled) */
     public static function handle_generate_awb() {
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.NonceVerification.Recommended -- Logging only, nonce verified below
         HGEZLPFCR_Logger::log('handle_generate_awb called', [
+            // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Logging only, nonce verified below
             'post_data' => $_POST,
+            // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Logging only, nonce verified below
             'get_data' => $_GET,
             'user_id' => get_current_user_id()
         ]);
@@ -951,7 +962,7 @@ class HGEZLPFCR_Admin_Order {
             HGEZLPFCR_Logger::log('AWB generation completed successfully', ['order_id' => $order_id, 'awb' => $awb]);
 
             // Fire hook for external integrations (e.g., FC PRO plugin)
-            do_action('fc_awb_generated_successfully', $order_id, $awb);
+            do_action('hgezlpfcr_awb_generated_successfully', $order_id, $awb);
 
             if ($redirect) self::admin_notice('AWB generat: '.$awb, 'success', $order_id);
             return true;
@@ -1529,6 +1540,20 @@ class HGEZLPFCR_Admin_Order {
         self::verify_nonce_and_caps();
         // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.NonceVerification.Recommended -- Nonce verified in verify_nonce_and_caps()
         $order_id = absint($_POST['post_id'] ?? $_GET['post_id'] ?? 0);
+
+        $order = wc_get_order($order_id);
+        if ($order) {
+            $awb = $order->get_meta(self::META_AWB);
+            $generation_date = $order->get_meta(self::META_AWB_DATE) ?: gmdate('Y-m-d');
+            $generation_date = self::adjust_date_for_fancourier($generation_date);
+
+            // Pas 1: User solicită verificarea (apare cu numele real al user-ului)
+            self::log_awb_action($order_id, 'Plugin-ul: HgE Fan Courier a preluat cererea', 'S-a cerut verificare AWB: ' . $awb . ' (Data FanCourier: ' . $generation_date . ')');
+
+            // Delay 60ms pentru a asigura ordinea corectă a timestamp-urilor
+            usleep(60000); // 60 milliseconds
+        }
+
         if (HGEZLPFCR_Settings::yes('hgezlpfcr_async') && function_exists('as_enqueue_async_action')) {
             as_enqueue_async_action('hgezlpfcr_sync_awb_async', [$order_id], 'woo-fancourier');
             self::admin_notice('Task verificare AWB programat.', 'info', $order_id);
@@ -1553,6 +1578,26 @@ class HGEZLPFCR_Admin_Order {
         $order = wc_get_order($order_id);
         if (!$order) { if ($redirect) self::admin_notice('Comandă invalidă.', 'error', $order_id); return; }
 
+        // Rate limiting: Check last verification time to prevent spam (5 seconds minimum between verifications)
+        if ($redirect) {
+            $last_verify_time = $order->get_meta('_hgezlpfcr_last_verify_time');
+            $current_time = microtime(true);
+
+            if ($last_verify_time && ($current_time - floatval($last_verify_time)) < 50) {
+                $wait_seconds = ceil(50 - ($current_time - floatval($last_verify_time)));
+                self::admin_notice('Te rog așteaptă ' . $wait_seconds . ' secunde înainte de a verifica din nou AWB-ul.', 'warning', $order_id);
+                if ($get_action === 'hgezlpfcr_sync_awb') {
+                    wp_safe_redirect(add_query_arg(['fc_refresh' => '1'], remove_query_arg(['action', 'post_id', 'hgezlpfcr_awb_nonce'])));
+                    exit;
+                }
+                return;
+            }
+
+            // Update last verification timestamp
+            $order->update_meta_data('_hgezlpfcr_last_verify_time', $current_time);
+            $order->save();
+        }
+
         // Skip auto-sync for completed orders (manual sync still allowed via button)
         $order_status = $order->get_status();
         if ($order_status === 'completed' && !$redirect) {
@@ -1575,10 +1620,13 @@ class HGEZLPFCR_Admin_Order {
         $generation_date = self::adjust_date_for_fancourier($generation_date);
 
         $api = new HGEZLPFCR_API_Client();
-        
-        // Log the sync attempt
-        self::log_awb_action($order_id, 'Verificare Status AWB', 'Încercare verificare AWB: ' . $awb . ' (Data FanCourier: ' . $generation_date . ')');
-        
+
+        // Pas 2: Plugin-ul execută cererea (apare ca "Plugin-ul: HgE Fan Courier")
+        self::log_awb_action($order_id, 'Execut cererea de verificare AWB', 'Se verifică AWB-ul: ' . $awb . ' (Data FanCourier: ' . $generation_date . ') în API-ul SelfAWB de la FanCourier', 'Plugin-ul: HgE Fan Courier');
+
+        // Delay 90ms înainte de verificarea efectivă pentru a asigura ordinea corectă
+        usleep(90000); // 90 milliseconds
+
         // First, check if AWB exists in FanCourier Borderou for specific date
         HGEZLPFCR_Logger::log('Sync Status: Starting AWB borderou check', [
             'order_id' => $order_id,
@@ -1672,8 +1720,8 @@ class HGEZLPFCR_Admin_Order {
             if (!empty($latest_status)) {
                 $order->update_meta_data(self::META_STAT, sanitize_text_field($latest_status));
                 $order->save();
-                // Log the successful sync
-                self::log_awb_action($order_id, 'AWB Verificat', 'AWB găsit în Borderou pentru data ' . $generation_date . '. Status actualizat: ' . $latest_status);
+                // Pas 3: Răspuns - AWB găsit cu status
+                self::log_awb_action($order_id, 'AWB verificat și găsit în SelfAWB', 'AWB: ' . $awb . ' a fost verificat și găsit în Borderou pentru data ' . $generation_date . '. Status: ' . $latest_status, 'Plugin-ul: HgE Fan Courier');
                 if ($redirect) {
                     self::admin_notice('AWB găsit în Borderou pentru data ' . $generation_date . '. Status actualizat: ' . $latest_status, 'success', $order_id);
                     // Force page refresh to update the interface
@@ -1683,7 +1731,8 @@ class HGEZLPFCR_Admin_Order {
                     }
                 }
             } else {
-                self::log_awb_action($order_id, 'AWB Verificat', 'AWB găsit în Borderou pentru data ' . $generation_date . ', dar nu s-a găsit status în datele de tracking');
+                // Pas 3: Răspuns - AWB găsit dar fără status
+                self::log_awb_action($order_id, 'AWB verificat și găsit în SelfAWB', 'AWB: ' . $awb . ' a fost verificat și găsit în Borderou pentru data ' . $generation_date . ', dar nu s-a găsit status în datele de tracking', 'Plugin-ul: HgE Fan Courier');
                 if ($redirect) {
                     self::admin_notice('AWB găsit în Borderou pentru data ' . $generation_date . ', dar nu s-a găsit status în datele de tracking.', 'warning', $order_id);
                     // Force page refresh to update the interface
@@ -1705,8 +1754,8 @@ class HGEZLPFCR_Admin_Order {
                 'is_wp_error' => is_wp_error($res)
             ]);
             
-            // Since we already verified the AWB exists in borderou, this is just a status retrieval error
-            self::log_awb_action($order_id, 'AWB Verificat', 'AWB găsit în Borderou pentru data ' . $generation_date . ', dar eroare la obținerea status-ului: ' . $error_message);
+            // Pas 3: Răspuns - Eroare la obținerea status
+            self::log_awb_action($order_id, 'Eroare verificare status AWB', 'AWB: ' . $awb . ' găsit în Borderou pentru data ' . $generation_date . ', dar eroare la obținerea status-ului: ' . $error_message, 'Plugin-ul: HgE Fan Courier');
             
             if ($redirect) {
                 self::admin_notice('AWB găsit în Borderou pentru data ' . $generation_date . ' dar nu s-a putut obține status-ul: ' . $error_message, 'warning', $order_id);
@@ -1830,8 +1879,8 @@ class HGEZLPFCR_Admin_Order {
         $success = empty($awb_after) && empty($stat_after);
         
         if ($success) {
-            // Mark in history as deleted because AWB doesn't exist in FanCourier
-            self::log_awb_action($order_id, 'AWB Șters (Inexistent FanCourier)', 'AWB șters din comandă (nu există în FanCourier): ' . $awb . ' - Motiv: ' . $reason);
+            // Pas 3: AWB nu există în FanCourier - șters din comandă
+            self::log_awb_action($order_id, 'AWB Șters', 'AWB: ' . $awb . ' nu există în Borderou FanCourier pentru data specificată. AWB-ul a fost șters din comandă.');
             
             HGEZLPFCR_Logger::log('AWB deleted from order (not found in FanCourier)', [
                 'order_id' => $order_id,
@@ -2243,6 +2292,27 @@ class HGEZLPFCR_Admin_Order {
             HGEZLPFCR_Logger::error('No AWB found to sync', ['order_id' => $order_id]);
             wp_send_json_error('Nu există AWB pentru această comandă.');
         }
+
+        // Rate limiting: Check last verification time to prevent spam (50 seconds minimum between verifications)
+        $last_verify_time = $order->get_meta('_hgezlpfcr_last_verify_time');
+        $current_time = microtime(true);
+
+        if ($last_verify_time && ($current_time - floatval($last_verify_time)) < 50) {
+            $wait_seconds = ceil(50 - ($current_time - floatval($last_verify_time)));
+            wp_send_json_error('Te rog așteaptă ' . $wait_seconds . ' secunde înainte de a verifica din nou AWB-ul.');
+        }
+
+        // Update last verification timestamp
+        $order->update_meta_data('_hgezlpfcr_last_verify_time', $current_time);
+        $order->save();
+
+        // Pas 1: User solicită verificarea prin AJAX (apare cu numele real al user-ului)
+        $generation_date = $order->get_meta(self::META_AWB_DATE) ?: gmdate('Y-m-d');
+        $generation_date = self::adjust_date_for_fancourier($generation_date);
+        self::log_awb_action($order_id, 'Plugin-ul: HgE Fan Courier a preluat cererea', 'S-a cerut verificare AWB: ' . $awb_before_sync . ' (Data FanCourier: ' . $generation_date . ')');
+
+        // Delay 60ms pentru a asigura ordinea corectă a timestamp-urilor
+        usleep(60000); // 60 milliseconds
 
         try {
             // Call existing sync function

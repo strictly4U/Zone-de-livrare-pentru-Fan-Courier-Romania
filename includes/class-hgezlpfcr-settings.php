@@ -22,6 +22,7 @@ class HGEZLPFCR_Settings {
                     ];
 
                     // Allow other plugins (like FC PRO) to add their sections
+                    // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce Settings API convention, $this->id is prefixed with 'hgezlpfcr'
                     return apply_filters('woocommerce_get_sections_' . $this->id, $sections);
                 }
 
@@ -65,7 +66,7 @@ class HGEZLPFCR_Settings {
                     ];
 
                     // Show PRO info section only if PRO plugin is NOT active
-                    if (!class_exists('FC_Pro_Settings')) {
+                    if (!class_exists('HGEZLPFCR_Pro_Settings')) {
                         $settings[] = [
                             'title' => __('🚀 Advanced Automations', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
                             'type' => 'title',
@@ -86,7 +87,8 @@ class HGEZLPFCR_Settings {
                     }
 
                     // Allow other plugins (like FC PRO) to add/modify settings
-                    return apply_filters('woocommerce_get_settings_fc', $settings, $current_section);
+                    // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce Settings API convention: woocommerce_get_settings_{tab_id}, where tab_id='hgezlpfcr' contains our prefix
+                    return apply_filters('woocommerce_get_settings_hgezlpfcr', $settings, $current_section);
                 }
             };
             return $pages;
