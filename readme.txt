@@ -130,7 +130,7 @@ Standard FAN Courier integration for WooCommerce with automatic AWB generation, 
 
 = Do I need a FAN Courier account? =
 
-Yes, you need an active FAN Courier business account with API access credentials. Contact FAN Courier to set up your account.
+Yes, you need an active FAN Courier Romania business account with API access credentials. Contact FAN Courier Romania to set up your account.
 
 = What are the API credentials I need? =
 
@@ -141,25 +141,25 @@ You need three credentials:
 
 = Can I generate AWBs automatically? =
 
-Yes! Enable "Generate AWB automatically on Processing" in plugin settings. AWBs will be created when orders change to "Processing" status.
+Yes. Only in the Pro version of this plugin you can choose multiple Order Statuses in order to generate AWBs automatically
 
 = Does the plugin support Cash on Delivery (COD)? =
 
 Yes, the plugin fully supports COD with options to:
 * Include/exclude shipping costs in COD amount
-* Specify bank account IBAN for COD collection
+* Specify bank account IBAN for COD collection. The FAN Courier API doesn't allow us to pass the account IBAN for COD collection. You need to ask FAN Courier to set this at account level if it is different from the account in your contract
 * Choose document type (Invoice or Receipt)
 * Configure COD payment at destination
 
 = How are shipping costs calculated? =
 
 You can choose between:
-* **Dynamic Pricing** - Real-time calculation via FAN Courier API based on destination, weight, and dimensions
+* **Dynamic Pricing** - Real-time calculation via the FAN Courier API based on destination, weight, and the dimensions you set on the product itself. Without weight and dimensions, no delivery option will be available for your clients in the Cart
 * **Fixed Pricing** - Set your own rates for Bucharest/Ilfov and rest of country
 
 = Can I offer free shipping? =
 
-Yes, configure a minimum order value for free shipping in the shipping method settings.
+Yes. In **WooCommerce > Settings > Shipping**, in the Shipping Methods, you have a new method available: Fan Courier – Standard, where you can configure a minimum order value for free shipping.
 
 = What happens if AWB generation fails? =
 
@@ -171,7 +171,7 @@ The plugin includes:
 
 = Can I delete an AWB after creation? =
 
-Yes, click the "Delete AWB" button on the order page. This removes the AWB from both WooCommerce and FAN Courier system.
+No, you can’t delete an AWB from the order page. You can delete it from the SelfAWB platform on the date it was created. After you delete it, the old AWB is removed from the order page and you can generate a new one.
 
 = Is the plugin compatible with HPOS? =
 
@@ -196,7 +196,7 @@ Currently, the plugin supports a single sender location configured in settings. 
 
 = Is there support for locker delivery? =
 
-Currently, only standard home/office delivery is supported. Locker delivery may be added in a future release.
+Currently, only Standard home/office delivery is supported. All other FAN Courier services such as Red Code, White Products, Locker, and Collect Point delivery will be available in the Pro version of this plugin.
 
 == Screenshots ==
 
