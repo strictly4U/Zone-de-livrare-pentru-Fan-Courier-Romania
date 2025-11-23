@@ -5,7 +5,7 @@ Tags: shipping zones, romania, fan courier, woocommerce, awb
 Requires at least: 5.0
 Tested up to: 6.8
 Requires PHP: 8.1
-Stable tag: 1.0.2
+Stable tag: 1.0.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -208,6 +208,10 @@ Currently, only Standard home/office delivery is supported. All other FAN Courie
 6. AWB history and tracking status in order details
 
 == Changelog ==
+= 1.0.3 - 2024-10-22 =
+* More detailed logging for debugging through comprehensive error handling
+* Full synchronization between Standard and PRO plugin
+* Romanian translation
 
 = 1.0.2 - 2024-10-18 =
 * Security: Fixed XSS vulnerability in cookie handling
