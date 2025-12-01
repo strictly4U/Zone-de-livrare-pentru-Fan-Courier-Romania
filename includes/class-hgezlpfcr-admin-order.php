@@ -903,6 +903,19 @@ class HGEZLPFCR_Admin_Order {
             HGEZLPFCR_Logger::log('Building payload for order', ['order_id' => $order_id]);
             $api = new HGEZLPFCR_API_Client();
             $payload = self::build_payload_from_order($order);
+
+            /**
+             * Filter AWB shipment data before sending to FAN Courier API
+             *
+             * Allows PRO plugin or other extensions to modify shipment data
+             * for specialized services (FANBox, CollectPoint, etc.)
+             *
+             * @since 1.0.3
+             * @param array $payload AWB shipment payload
+             * @param WC_Order $order WooCommerce order object
+             */
+            $payload = apply_filters('hgezlpfcr_awb_shipment_data', $payload, $order);
+
             $idem_key = 'order-'.$order->get_id().'-'.wp_hash((string)$order->get_date_created()->getTimestamp());
 
             HGEZLPFCR_Logger::log('Create AWB request', ['order'=>$order->get_id(), 'payload'=>$payload, 'idem_key' => $idem_key]);
