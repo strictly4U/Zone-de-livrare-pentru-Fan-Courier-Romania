@@ -16,7 +16,7 @@
 if (!defined('ABSPATH')) exit;
 
 define('HGEZLPFCR_PLUGIN_FILE', __FILE__);
-define('HGEZLPFCR_PLUGIN_VER', '1.0.2');
+define('HGEZLPFCR_PLUGIN_VER', '1.0.3');
 define('HGEZLPFCR_OPTION_GROUP', 'hgezlpfcr_settings');
 
 // HGEZLPFCR_LOG_ENABLED will be defined dynamically based on 'hgezlpfcr_debug' setting
