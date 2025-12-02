@@ -6,7 +6,7 @@ class HGEZLPFCR_Shipping_Standard extends WC_Shipping_Method {
         $this->id                 = 'fc_standard';
         $this->instance_id        = absint($instance_id);
         $this->method_title       = __('FAN Courier: Standard', 'hge-zone-de-livrare-pentru-fan-courier-romania');
-        $this->method_description = __('Livrare standard FAN Courier (cost fix configurabil).', 'hge-zone-de-livrare-pentru-fan-courier-romania');
+        $this->method_description = __('FAN Courier standard delivery (configurable fixed cost).', 'hge-zone-de-livrare-pentru-fan-courier-romania');
         $this->supports           = ['shipping-zones', 'instance-settings', 'instance-settings-modal'];
         $this->enabled            = 'yes';
         $this->title              = __('FAN Courier Standard', 'hge-zone-de-livrare-pentru-fan-courier-romania');
@@ -15,34 +15,34 @@ class HGEZLPFCR_Shipping_Standard extends WC_Shipping_Method {
     public function init() {
         $this->instance_form_fields = [
             'title' => [
-                'title'       => __('Titlu la checkout', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
+                'title'       => __('Checkout title', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
                 'type'        => 'text',
                 'default'     => __('FAN Courier Standard', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
             ],
             'enable_dynamic_pricing' => [
-                'title'       => __('Tarifare dinamică', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
+                'title'       => __('Dynamic pricing', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
                 'type'        => 'checkbox',
-                'label'       => __('Activează calculul în timp real prin API', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
+                'label'       => __('Enable real-time calculation via API', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
                 'default'     => 'yes',
-                'description' => __('Dacă este bifat, costul va fi calculat dinamic prin API FAN Courier.', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
+                'description' => __('If checked, cost will be calculated dynamically via FAN Courier API.', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
             ],
             'free_shipping_min' => [
-                'title'       => __('Transport gratuit minim', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
+                'title'       => __('Free shipping minimum', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
                 'type'        => 'price',
                 'default'     => '0',
-                'description' => __('Valoarea minimă pentru transport gratuit. Lăsați 0 pentru a dezactiva.', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
+                'description' => __('Minimum value for free shipping. Leave 0 to disable.', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
             ],
             'cost_bucharest' => [
-                'title'       => __('Cost Fix București', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
+                'title'       => __('Fixed Cost Bucharest', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
                 'type'        => 'price',
                 'default'     => '0',
-                'description' => __('Cost fix pentru București și Ilfov (când tarifare dinamică este dezactivată).', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
+                'description' => __('Fixed cost for Bucharest and Ilfov (when dynamic pricing is disabled).', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
             ],
             'cost_country' => [
-                'title'       => __('Cost Fix Țară', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
+                'title'       => __('Fixed Cost Country', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
                 'type'        => 'price',
                 'default'     => '0',
-                'description' => __('Cost fix pentru restul țării, în afara București și Ilfov (când tarifare dinamică este dezactivată).', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
+                'description' => __('Fixed cost for the rest of the country, outside Bucharest and Ilfov (when dynamic pricing is disabled).', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
             ],
         ];
         $this->init_instance_settings();
@@ -125,7 +125,7 @@ class HGEZLPFCR_Shipping_Standard extends WC_Shipping_Method {
                 'length' => 30,
                 'width' => 20,
                 'height' => 10,
-                'declared_value' => WC()->cart ? WC()->cart->get_total('edit') : 0, // Folosește total-ul cu TVA
+                'declared_value' => WC()->cart ? WC()->cart->get_total('edit') : 0, // Use total with VAT
             ];
             
             $response = $api->get_tariff($params);
@@ -193,7 +193,7 @@ class HGEZLPFCR_Shipping_Standard extends WC_Shipping_Method {
         $city = trim($destination['city'] ?? '');
         $state = trim($destination['state'] ?? '');
         
-        // Check if destination is București (B) or Ilfov (IF) based on WooCommerce values
+        // Check if destination is Bucharest (B) or Ilfov (IF) based on WooCommerce values
         $is_bucharest_area = false;
         
         // Check by state/county code (most reliable)
@@ -203,18 +203,18 @@ class HGEZLPFCR_Shipping_Standard extends WC_Shipping_Method {
         // Additional checks for city names (case-insensitive)
         elseif (!empty($city)) {
             $city_lower = strtolower($city);
-            // București sectors
-            if (strpos($city_lower, 'sector') !== false && 
-                (strpos($city_lower, '1') !== false || 
-                 strpos($city_lower, '2') !== false || 
-                 strpos($city_lower, '3') !== false || 
-                 strpos($city_lower, '4') !== false || 
-                 strpos($city_lower, '5') !== false || 
+            // Bucharest sectors
+            if (strpos($city_lower, 'sector') !== false &&
+                (strpos($city_lower, '1') !== false ||
+                 strpos($city_lower, '2') !== false ||
+                 strpos($city_lower, '3') !== false ||
+                 strpos($city_lower, '4') !== false ||
+                 strpos($city_lower, '5') !== false ||
                  strpos($city_lower, '6') !== false)) {
                 $is_bucharest_area = true;
             }
-            // General București variations
-            elseif (strpos($city_lower, 'bucuresti') !== false || 
+            // General Bucharest variations
+            elseif (strpos($city_lower, 'bucuresti') !== false ||
                     strpos($city_lower, 'bucharest') !== false ||
                     strpos($city_lower, 'bucureşti') !== false) {
                 $is_bucharest_area = true;
@@ -230,7 +230,7 @@ class HGEZLPFCR_Shipping_Standard extends WC_Shipping_Method {
         ]);
         
         if ($is_bucharest_area) {
-            // Use București cost from instance settings
+            // Use Bucharest cost from instance settings
             return (float) $this->get_instance_option('cost_bucharest', 0);
         } else {
             // Use country cost from instance settings

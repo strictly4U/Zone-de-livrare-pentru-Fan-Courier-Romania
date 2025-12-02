@@ -1,0 +1,248 @@
+# Translation file for HgE: Shipping Zones for FAN Courier Romania
+# Copyright (C) 2025
+# This file is distributed under the same license as the plugin.
+msgid ""
+msgstr ""
+"Project-Id-Version: HgE: Shipping Zones for FAN Courier Romania 1.0.2\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-01-21 10:00+0000\n"
+"PO-Revision-Date: 2025-01-21 10:00+0000\n"
+"Last-Translator: \n"
+"Language-Team: Romanian\n"
+"Language: ro_RO\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n==1 ? 0 : (n==0 || (n%100>0 && n%100<20)) ? 1 : 2);\n"
+"X-Generator: Manual\n"
+
+#: woo-fancourier.php:3
+msgid "HgE: Shipping Zones for FAN Courier Romania"
+msgstr "HgE: Zone de Livrare pentru FAN Courier Romania"
+
+#: woo-fancourier.php:5
+msgid "WooCommerce shipping zones integration for FAN Courier Romania (Standard service). Manual AWB generation, PDF label display for orders, and AWB generation history."
+msgstr "Integrare zone de livrare WooCommerce pentru FAN Courier Romania (serviciu Standard). Generare manuală AWB, afișare etichete PDF pentru comenzi și istoric generare AWB."
+
+#: woo-fancourier.php:180
+msgid "requires WooCommerce to work. Please install and activate WooCommerce."
+msgstr "necesită WooCommerce pentru a funcționa. Te rugăm să instalezi și să activezi WooCommerce."
+
+#: includes/class-hgezlpfcr-healthcheck.php:31
+msgid "Fan Courier – Healthcheck"
+msgstr "Fan Courier – Verificare Sănătate"
+
+#: includes/class-hgezlpfcr-admin-order.php:89
+msgid "Fan Courier – AWB & Acțiuni"
+msgstr "Fan Courier – AWB & Acțiuni"
+
+#: includes/class-hgezlpfcr-admin-order.php:98
+msgid "Fan Courier – Istoric AWB"
+msgstr "Fan Courier – Istoric AWB"
+
+# Butoane și acțiuni
+msgid "Generate AWB"
+msgstr "Generează AWB"
+
+msgid "Download PDF"
+msgstr "Descarcă PDF"
+
+msgid "Verify AWB"
+msgstr "Verifică AWB"
+
+msgid "Sync AWB"
+msgstr "Sincronizare AWB"
+
+# Mesaje de status
+msgid "AWB generated successfully"
+msgstr "AWB generat cu succes"
+
+msgid "Error generating AWB"
+msgstr "Eroare la generarea AWB"
+
+msgid "Generating AWB..."
+msgstr "Se generează AWB..."
+
+msgid "Checking AWB in FanCourier..."
+msgstr "Verificare AWB în FanCourier..."
+
+msgid "AWB synced successfully"
+msgstr "AWB sincronizat cu succes"
+
+msgid "Error syncing AWB"
+msgstr "Eroare la sincronizarea AWB"
+
+# Setări
+msgid "FAN Courier Settings"
+msgstr "Setări FAN Courier"
+
+msgid "API Credentials"
+msgstr "Credențiale API"
+
+msgid "Username"
+msgstr "Nume utilizator"
+
+msgid "Password"
+msgstr "Parolă"
+
+msgid "Client ID"
+msgstr "ID Client"
+
+msgid "API Key"
+msgstr "Cheie API"
+
+msgid "Debug Log"
+msgstr "Jurnal Debug"
+
+msgid "Enable debug logging"
+msgstr "Activează înregistrarea debug"
+
+msgid "Automatic AWB Generation"
+msgstr "Generare Automată AWB"
+
+msgid "Enable automatic AWB generation"
+msgstr "Activează generarea automată de AWB"
+
+msgid "Order Status"
+msgstr "Status Comandă"
+
+msgid "Processing"
+msgstr "În procesare"
+
+msgid "Completed"
+msgstr "Finalizată"
+
+msgid "On Hold"
+msgstr "În așteptare"
+
+# Shipping method
+msgid "Fan Courier Standard"
+msgstr "Fan Courier Standard"
+
+msgid "Standard shipping via FAN Courier"
+msgstr "Livrare standard prin FAN Courier"
+
+msgid "Shipping Cost"
+msgstr "Cost transport"
+
+msgid "Enable/Disable"
+msgstr "Activează/Dezactivează"
+
+msgid "Enable this shipping method"
+msgstr "Activează această metodă de livrare"
+
+msgid "Method Title"
+msgstr "Titlu metodă"
+
+msgid "This controls the title which the user sees during checkout."
+msgstr "Acest text controlează titlul pe care utilizatorul îl vede la checkout."
+
+# Erori și avertizări
+msgid "Invalid order ID"
+msgstr "ID comandă invalid"
+
+msgid "Order not found"
+msgstr "Comandă negăsită"
+
+msgid "Insufficient permissions"
+msgstr "Permisiuni insuficiente"
+
+msgid "Invalid nonce"
+msgstr "Nonce invalid"
+
+msgid "Missing nonce"
+msgstr "Nonce lipsă"
+
+msgid "AWB already exists"
+msgstr "AWB deja existent"
+
+msgid "AWB not generated yet"
+msgstr "AWB nu a fost generat încă"
+
+msgid "Order status not allowed for AWB generation"
+msgstr "Status-ul comenzii nu permite generarea AWB"
+
+msgid "API credentials not configured"
+msgstr "Credențialele API nu sunt configurate"
+
+msgid "Could not connect to FAN Courier API"
+msgstr "Nu s-a putut conecta la API-ul FAN Courier"
+
+# Healthcheck
+msgid "Ping API"
+msgstr "Ping API"
+
+msgid "Test API credentials"
+msgstr "Testează credențiale API"
+
+msgid "Force AWB synchronization"
+msgstr "Forțează sincronizarea AWB"
+
+msgid "Check deleted AWBs"
+msgstr "Verifică AWB-uri șterse"
+
+msgid "Clear expired locks"
+msgstr "Curăță lock-uri expirate"
+
+msgid "Ping OK"
+msgstr "Ping OK"
+
+msgid "Ping failed"
+msgstr "Ping eșuat"
+
+msgid "Credentials appear valid (API response OK)."
+msgstr "Credențialele par valide (răspuns API OK)."
+
+msgid "Invalid credentials"
+msgstr "Credențiale invalide"
+
+# Status și informații
+msgid "AWB:"
+msgstr "AWB:"
+
+msgid "Status:"
+msgstr "Status:"
+
+msgid "Order status:"
+msgstr "Status comandă:"
+
+msgid "Generated:"
+msgstr "Generat:"
+
+msgid "Last updated:"
+msgstr "Ultima actualizare:"
+
+# Istoric
+msgid "No history available for this order."
+msgstr "Nu există istoric pentru această comandă."
+
+msgid "Recent errors detected"
+msgstr "Erori recente detectate"
+
+msgid "Action"
+msgstr "Acțiune"
+
+msgid "Date"
+msgstr "Dată"
+
+msgid "Details"
+msgstr "Detalii"
+
+# Notice-uri
+msgid "AWB generation is available for the following statuses:"
+msgstr "Generarea AWB este disponibilă pentru următoarele status-uri:"
+
+msgid "New Order"
+msgstr "Comandă Nouă"
+
+msgid "Payment Confirmed"
+msgstr "Plată Confirmată"
+
+msgid "Generate Invoice Advance"
+msgstr "Emite Factură Avans"
+
+msgid "AWB generation is not available for this status."
+msgstr "Generarea AWB nu este disponibilă pentru acest status."
+
+msgid "Allowed statuses:"
+msgstr "Status-uri permise:"

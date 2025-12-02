@@ -41,9 +41,9 @@ class HGEZLPFCR_Admin_Order {
         // add_action('add_meta_boxes', [__CLASS__, 'add_awb_meta_boxes'], 35);
 
         // Actions via POST - keep these active
-        add_action('admin_post_fc_generate_awb', [__CLASS__, 'handle_generate_awb']);
-        add_action('admin_post_fc_download_awb', [__CLASS__, 'handle_download_pdf']);
-        add_action('admin_post_fc_sync_awb',     [__CLASS__, 'handle_sync_status']);
+        add_action('admin_post_hgezlpfcr_generate_awb', [__CLASS__, 'handle_generate_awb']);
+        add_action('admin_post_hgezlpfcr_download_awb', [__CLASS__, 'handle_download_pdf']);
+        add_action('admin_post_hgezlpfcr_sync_awb',     [__CLASS__, 'handle_sync_status']);
         
         // Add AWB column and actions to orders list (both classic and HPOS)
         add_filter('manage_edit-shop_order_columns', [__CLASS__, 'add_awb_column']);
@@ -74,8 +74,8 @@ class HGEZLPFCR_Admin_Order {
         add_action('admin_enqueue_scripts', [__CLASS__, 'enqueue_admin_scripts']);
         
                  // Add test actions for debugging
-         add_action('admin_post_fc_clear_token', [__CLASS__, 'handle_clear_token']);
-         add_action('admin_post_fc_reset_order_markers', [__CLASS__, 'handle_reset_order_markers']);
+         add_action('admin_post_hgezlpfcr_clear_token', [__CLASS__, 'handle_clear_token']);
+         add_action('admin_post_hgezlpfcr_reset_order_markers', [__CLASS__, 'handle_reset_order_markers']);
     }
 
     public static function add_awb_meta_boxes() {
@@ -129,7 +129,7 @@ class HGEZLPFCR_Admin_Order {
             echo '<form method="post" action="'.esc_url(admin_url('admin-post.php')).'">';
             wp_nonce_field('hgezlpfcr_awb_actions', 'hgezlpfcr_awb_nonce');
             echo '<input type="hidden" name="post_id" value="'.esc_attr($post->ID).'">';
-            echo '<input type="hidden" name="action" value="fc_generate_awb">';
+            echo '<input type="hidden" name="action" value="hgezlpfcr_generate_awb">';
             echo '<p><button class="button button-primary" type="submit">Generează AWB</button></p>';
             echo '</form>';
         }
@@ -138,7 +138,7 @@ class HGEZLPFCR_Admin_Order {
             echo '<form method="post" action="'.esc_url(admin_url('admin-post.php')).'">';
             wp_nonce_field('hgezlpfcr_awb_actions', 'hgezlpfcr_awb_nonce');
             echo '<input type="hidden" name="post_id" value="'.esc_attr($post->ID).'">';
-            echo '<input type="hidden" name="action" value="fc_download_awb">';
+            echo '<input type="hidden" name="action" value="hgezlpfcr_download_awb">';
             echo '<p><button class="button" type="submit">Descarcă PDF</button></p>';
             echo '</form>';
 
@@ -266,16 +266,16 @@ class HGEZLPFCR_Admin_Order {
         $allowed_statuses = ['processing', 'comanda-noua', 'completed', 'plata-confirmata', 'emite-factura-avans'];
         $can_generate = in_array($order_status, $allowed_statuses);
         
-        echo '<div class="fc-awb-actions" data-order-id="' . esc_attr($post->ID) . '">';
-        
+        echo '<div class="hgezlpfcr-awb-actions" data-order-id="' . esc_attr($post->ID) . '">';
+
         if ($awb) {
             echo '<p><strong>AWB:</strong> <code>' . esc_html($awb) . '</code></p>';
             if ($status) {
                 echo '<p><strong>Status:</strong> ' . esc_html($status) . '</p>';
             }
-            
-            echo '<div class="fc-awb-buttons" style="margin: 10px 0;">';
-            
+
+            echo '<div class="hgezlpfcr-awb-buttons" style="margin: 10px 0;">';
+
             // Download PDF link (GET with nonce)
             $download_url = admin_url('admin-post.php?' . http_build_query([
                 'action' => 'hgezlpfcr_download_awb',
@@ -283,24 +283,24 @@ class HGEZLPFCR_Admin_Order {
                 'hgezlpfcr_awb_nonce' => wp_create_nonce('hgezlpfcr_awb_actions')
             ]));
             echo '<a href="' . esc_url($download_url) . '" class="button">📄 Descarcă PDF</a> ';
-            
+
             // Sync status button (AJAX)
             $nonce = wp_create_nonce('hgezlpfcr_awb_ajax');
             echo '<button type="button" class="button fc-sync-awb-btn" data-order-id="' . esc_attr($post->ID) . '" data-nonce="' . esc_attr($nonce) . '">🔄 Verifică AWB</button>';
-            
+
             echo '</div>';
-            
+
             // Status area for AJAX responses
-            echo '<div class="fc-awb-status" style="margin-top: 10px; display: none;"></div>';
+            echo '<div class="hgezlpfcr-awb-status" style="margin-top: 10px; display: none;"></div>';
             
         } elseif ($can_generate) {
             echo '<p><strong>Status comandă:</strong> ' . esc_html($order_status) . '</p>';
             echo '<p><em>AWB nu a fost generat încă.</em></p>';
             
                                         // Generate AWB button (AJAX)
-               echo '<div class="fc-awb-buttons" style="margin: 10px 0;">';
-               echo '<button type="button" class="button button-primary fc-generate-awb-btn" data-order-id="' . esc_attr($post->ID) . '">🚚 Generează AWB</button>';
-               echo '<div class="fc-awb-status" style="margin-top: 10px; display: none;"></div>';
+               echo '<div class="hgezlpfcr-awb-actions" style="margin: 10px 0;">';
+               echo '<button type="button" class="button button-primary hgezlpfcr-generate-awb-btn" data-order-id="' . esc_attr($post->ID) . '">🚚 Generează AWB</button>';
+               echo '<div class="hgezlpfcr-awb-status" style="margin-top: 10px; display: none;"></div>';
                echo '</div>';
             
         } else {
@@ -692,17 +692,25 @@ class HGEZLPFCR_Admin_Order {
     }
 
     /** AWB History logging */
-    protected static function log_awb_action($order_id, $action, $details = '') {
+    protected static function log_awb_action($order_id, $action, $details = '', $custom_user = '') {
         $order = wc_get_order($order_id);
         if (!$order) return;
-        
+
         $current_user = wp_get_current_user();
-        $user_name = $current_user->display_name ?: $current_user->user_login ?: 'System';
-        
+
+        // Use custom user name if provided, otherwise use current user
+        if (!empty($custom_user)) {
+            $user_name = $custom_user;
+            $user_id = 0; // No user ID for custom names like "Plugin-ul: HgE Fan Courier"
+        } else {
+            $user_name = $current_user->display_name ?: $current_user->user_login ?: 'System';
+            $user_id = $current_user->ID ?: 0;
+        }
+
         $history_entry = [
-            'timestamp' => time(),
+            'timestamp' => microtime(true), // Use microtime for precise ordering
             'user' => $user_name,
-            'user_id' => $current_user->ID ?: 0,
+            'user_id' => $user_id,
             'action' => $action,
             'order_status' => $order->get_status(),
             'details' => $details,
@@ -760,7 +768,19 @@ class HGEZLPFCR_Admin_Order {
 
     /** Admin button: generate AWB (queues if async enabled) */
     public static function handle_generate_awb() {
+        // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.NonceVerification.Recommended -- Logging only, nonce verified below
+        HGEZLPFCR_Logger::log('handle_generate_awb called', [
+            // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Logging only, nonce verified below
+            'post_data' => $_POST,
+            // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Logging only, nonce verified below
+            'get_data' => $_GET,
+            'user_id' => get_current_user_id()
+        ]);
+
         self::verify_nonce_and_caps();
+
+        HGEZLPFCR_Logger::log('Nonce and caps verified successfully');
+
         // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.NonceVerification.Recommended -- Nonce verified in verify_nonce_and_caps()
         $order_id = absint($_POST['post_id'] ?? $_GET['post_id'] ?? 0);
         
@@ -883,6 +903,19 @@ class HGEZLPFCR_Admin_Order {
             HGEZLPFCR_Logger::log('Building payload for order', ['order_id' => $order_id]);
             $api = new HGEZLPFCR_API_Client();
             $payload = self::build_payload_from_order($order);
+
+            /**
+             * Filter AWB shipment data before sending to FAN Courier API
+             *
+             * Allows PRO plugin or other extensions to modify shipment data
+             * for specialized services (FANBox, CollectPoint, etc.)
+             *
+             * @since 1.0.3
+             * @param array $payload AWB shipment payload
+             * @param WC_Order $order WooCommerce order object
+             */
+            $payload = apply_filters('hgezlpfcr_awb_shipment_data', $payload, $order);
+
             $idem_key = 'order-'.$order->get_id().'-'.wp_hash((string)$order->get_date_created()->getTimestamp());
 
             HGEZLPFCR_Logger::log('Create AWB request', ['order'=>$order->get_id(), 'payload'=>$payload, 'idem_key' => $idem_key]);
@@ -942,7 +975,7 @@ class HGEZLPFCR_Admin_Order {
             HGEZLPFCR_Logger::log('AWB generation completed successfully', ['order_id' => $order_id, 'awb' => $awb]);
 
             // Fire hook for external integrations (e.g., FC PRO plugin)
-            do_action('fc_awb_generated_successfully', $order_id, $awb);
+            do_action('hgezlpfcr_awb_generated_successfully', $order_id, $awb);
 
             if ($redirect) self::admin_notice('AWB generat: '.$awb, 'success', $order_id);
             return true;
@@ -1520,6 +1553,20 @@ class HGEZLPFCR_Admin_Order {
         self::verify_nonce_and_caps();
         // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.NonceVerification.Recommended -- Nonce verified in verify_nonce_and_caps()
         $order_id = absint($_POST['post_id'] ?? $_GET['post_id'] ?? 0);
+
+        $order = wc_get_order($order_id);
+        if ($order) {
+            $awb = $order->get_meta(self::META_AWB);
+            $generation_date = $order->get_meta(self::META_AWB_DATE) ?: gmdate('Y-m-d');
+            $generation_date = self::adjust_date_for_fancourier($generation_date);
+
+            // Pas 1: User solicită verificarea (apare cu numele real al user-ului)
+            self::log_awb_action($order_id, 'Plugin-ul: HgE Fan Courier a preluat cererea', 'S-a cerut verificare AWB: ' . $awb . ' (Data FanCourier: ' . $generation_date . ')');
+
+            // Delay 60ms pentru a asigura ordinea corectă a timestamp-urilor
+            usleep(60000); // 60 milliseconds
+        }
+
         if (HGEZLPFCR_Settings::yes('hgezlpfcr_async') && function_exists('as_enqueue_async_action')) {
             as_enqueue_async_action('hgezlpfcr_sync_awb_async', [$order_id], 'woo-fancourier');
             self::admin_notice('Task verificare AWB programat.', 'info', $order_id);
@@ -1544,6 +1591,26 @@ class HGEZLPFCR_Admin_Order {
         $order = wc_get_order($order_id);
         if (!$order) { if ($redirect) self::admin_notice('Comandă invalidă.', 'error', $order_id); return; }
 
+        // Rate limiting: Check last verification time to prevent spam (5 seconds minimum between verifications)
+        if ($redirect) {
+            $last_verify_time = $order->get_meta('_hgezlpfcr_last_verify_time');
+            $current_time = microtime(true);
+
+            if ($last_verify_time && ($current_time - floatval($last_verify_time)) < 50) {
+                $wait_seconds = ceil(50 - ($current_time - floatval($last_verify_time)));
+                self::admin_notice('Te rog așteaptă ' . $wait_seconds . ' secunde înainte de a verifica din nou AWB-ul.', 'warning', $order_id);
+                if ($get_action === 'hgezlpfcr_sync_awb') {
+                    wp_safe_redirect(add_query_arg(['fc_refresh' => '1'], remove_query_arg(['action', 'post_id', 'hgezlpfcr_awb_nonce'])));
+                    exit;
+                }
+                return;
+            }
+
+            // Update last verification timestamp
+            $order->update_meta_data('_hgezlpfcr_last_verify_time', $current_time);
+            $order->save();
+        }
+
         // Skip auto-sync for completed orders (manual sync still allowed via button)
         $order_status = $order->get_status();
         if ($order_status === 'completed' && !$redirect) {
@@ -1566,10 +1633,13 @@ class HGEZLPFCR_Admin_Order {
         $generation_date = self::adjust_date_for_fancourier($generation_date);
 
         $api = new HGEZLPFCR_API_Client();
-        
-        // Log the sync attempt
-        self::log_awb_action($order_id, 'Verificare Status AWB', 'Încercare verificare AWB: ' . $awb . ' (Data FanCourier: ' . $generation_date . ')');
-        
+
+        // Pas 2: Plugin-ul execută cererea (apare ca "Plugin-ul: HgE Fan Courier")
+        self::log_awb_action($order_id, 'Execut cererea de verificare AWB', 'Se verifică AWB-ul: ' . $awb . ' (Data FanCourier: ' . $generation_date . ') în API-ul SelfAWB de la FanCourier', 'Plugin-ul: HgE Fan Courier');
+
+        // Delay 90ms înainte de verificarea efectivă pentru a asigura ordinea corectă
+        usleep(90000); // 90 milliseconds
+
         // First, check if AWB exists in FanCourier Borderou for specific date
         HGEZLPFCR_Logger::log('Sync Status: Starting AWB borderou check', [
             'order_id' => $order_id,
@@ -1663,8 +1733,8 @@ class HGEZLPFCR_Admin_Order {
             if (!empty($latest_status)) {
                 $order->update_meta_data(self::META_STAT, sanitize_text_field($latest_status));
                 $order->save();
-                // Log the successful sync
-                self::log_awb_action($order_id, 'AWB Verificat', 'AWB găsit în Borderou pentru data ' . $generation_date . '. Status actualizat: ' . $latest_status);
+                // Pas 3: Răspuns - AWB găsit cu status
+                self::log_awb_action($order_id, 'AWB verificat și găsit în SelfAWB', 'AWB: ' . $awb . ' a fost verificat și găsit în Borderou pentru data ' . $generation_date . '. Status: ' . $latest_status, 'Plugin-ul: HgE Fan Courier');
                 if ($redirect) {
                     self::admin_notice('AWB găsit în Borderou pentru data ' . $generation_date . '. Status actualizat: ' . $latest_status, 'success', $order_id);
                     // Force page refresh to update the interface
@@ -1674,7 +1744,8 @@ class HGEZLPFCR_Admin_Order {
                     }
                 }
             } else {
-                self::log_awb_action($order_id, 'AWB Verificat', 'AWB găsit în Borderou pentru data ' . $generation_date . ', dar nu s-a găsit status în datele de tracking');
+                // Pas 3: Răspuns - AWB găsit dar fără status
+                self::log_awb_action($order_id, 'AWB verificat și găsit în SelfAWB', 'AWB: ' . $awb . ' a fost verificat și găsit în Borderou pentru data ' . $generation_date . ', dar nu s-a găsit status în datele de tracking', 'Plugin-ul: HgE Fan Courier');
                 if ($redirect) {
                     self::admin_notice('AWB găsit în Borderou pentru data ' . $generation_date . ', dar nu s-a găsit status în datele de tracking.', 'warning', $order_id);
                     // Force page refresh to update the interface
@@ -1696,8 +1767,8 @@ class HGEZLPFCR_Admin_Order {
                 'is_wp_error' => is_wp_error($res)
             ]);
             
-            // Since we already verified the AWB exists in borderou, this is just a status retrieval error
-            self::log_awb_action($order_id, 'AWB Verificat', 'AWB găsit în Borderou pentru data ' . $generation_date . ', dar eroare la obținerea status-ului: ' . $error_message);
+            // Pas 3: Răspuns - Eroare la obținerea status
+            self::log_awb_action($order_id, 'Eroare verificare status AWB', 'AWB: ' . $awb . ' găsit în Borderou pentru data ' . $generation_date . ', dar eroare la obținerea status-ului: ' . $error_message, 'Plugin-ul: HgE Fan Courier');
             
             if ($redirect) {
                 self::admin_notice('AWB găsit în Borderou pentru data ' . $generation_date . ' dar nu s-a putut obține status-ul: ' . $error_message, 'warning', $order_id);
@@ -1821,8 +1892,8 @@ class HGEZLPFCR_Admin_Order {
         $success = empty($awb_after) && empty($stat_after);
         
         if ($success) {
-            // Mark in history as deleted because AWB doesn't exist in FanCourier
-            self::log_awb_action($order_id, 'AWB Șters (Inexistent FanCourier)', 'AWB șters din comandă (nu există în FanCourier): ' . $awb . ' - Motiv: ' . $reason);
+            // Pas 3: AWB nu există în FanCourier - șters din comandă
+            self::log_awb_action($order_id, 'AWB Șters', 'AWB: ' . $awb . ' nu există în Borderou FanCourier pentru data specificată. AWB-ul a fost șters din comandă.');
             
             HGEZLPFCR_Logger::log('AWB deleted from order (not found in FanCourier)', [
                 'order_id' => $order_id,
@@ -1958,6 +2029,11 @@ class HGEZLPFCR_Admin_Order {
     }
 
     protected static function verify_nonce_and_caps() {
+        HGEZLPFCR_Logger::log('verify_nonce_and_caps started', [
+            'user_id' => get_current_user_id(),
+            'can_manage_woocommerce' => current_user_can('manage_woocommerce')
+        ]);
+
         if (!current_user_can('manage_woocommerce')) {
             HGEZLPFCR_Logger::error('Permission denied for AWB action', [
                 'user_id' => get_current_user_id(),
@@ -1966,7 +2042,7 @@ class HGEZLPFCR_Admin_Order {
             ]);
             wp_die('Permisiuni insuficiente.');
         }
-        
+
         // Check nonce from POST or GET
         // Get nonce from POST or GET, sanitize it properly
         // phpcs:disable WordPress.Security.NonceVerification.Missing,WordPress.Security.NonceVerification.Recommended -- This IS the nonce verification function
@@ -1977,16 +2053,29 @@ class HGEZLPFCR_Admin_Order {
             $nonce = sanitize_text_field(wp_unslash($_GET['hgezlpfcr_awb_nonce']));
         }
 
+        HGEZLPFCR_Logger::log('Nonce check', [
+            'nonce_found' => !empty($nonce),
+            'nonce_value' => $nonce
+        ]);
+
         if (empty($nonce)) {
             HGEZLPFCR_Logger::error('Missing nonce for AWB action', [
-                'user_id' => get_current_user_id()
+                'user_id' => get_current_user_id(),
+                'POST_keys' => array_keys($_POST),
+                'GET_keys' => array_keys($_GET)
             ]);
             wp_die('Nonce lipsă.');
         }
 
-        if (!wp_verify_nonce($nonce, 'hgezlpfcr_awb_actions')) {
+        $nonce_valid = wp_verify_nonce($nonce, 'hgezlpfcr_awb_actions');
+        HGEZLPFCR_Logger::log('Nonce verification result', [
+            'valid' => $nonce_valid
+        ]);
+
+        if (!$nonce_valid) {
             HGEZLPFCR_Logger::error('Invalid nonce for AWB action', [
-                'user_id' => get_current_user_id()
+                'user_id' => get_current_user_id(),
+                'nonce' => $nonce
             ]);
             wp_die('Nonce invalid.');
         }
@@ -2217,6 +2306,27 @@ class HGEZLPFCR_Admin_Order {
             wp_send_json_error('Nu există AWB pentru această comandă.');
         }
 
+        // Rate limiting: Check last verification time to prevent spam (50 seconds minimum between verifications)
+        $last_verify_time = $order->get_meta('_hgezlpfcr_last_verify_time');
+        $current_time = microtime(true);
+
+        if ($last_verify_time && ($current_time - floatval($last_verify_time)) < 50) {
+            $wait_seconds = ceil(50 - ($current_time - floatval($last_verify_time)));
+            wp_send_json_error('Te rog așteaptă ' . $wait_seconds . ' secunde înainte de a verifica din nou AWB-ul.');
+        }
+
+        // Update last verification timestamp
+        $order->update_meta_data('_hgezlpfcr_last_verify_time', $current_time);
+        $order->save();
+
+        // Pas 1: User solicită verificarea prin AJAX (apare cu numele real al user-ului)
+        $generation_date = $order->get_meta(self::META_AWB_DATE) ?: gmdate('Y-m-d');
+        $generation_date = self::adjust_date_for_fancourier($generation_date);
+        self::log_awb_action($order_id, 'Plugin-ul: HgE Fan Courier a preluat cererea', 'S-a cerut verificare AWB: ' . $awb_before_sync . ' (Data FanCourier: ' . $generation_date . ')');
+
+        // Delay 60ms pentru a asigura ordinea corectă a timestamp-urilor
+        usleep(60000); // 60 milliseconds
+
         try {
             // Call existing sync function
             self::sync_status_for_order($order_id, false); // No redirect for AJAX
@@ -2274,9 +2384,9 @@ class HGEZLPFCR_Admin_Order {
             if ($status) {
                 echo '<p><strong>Status:</strong> ' . esc_html($status) . '</p>';
             }
-            
-            echo '<div class="fc-awb-buttons" style="margin: 10px 0;">';
-            
+
+            echo '<div class="hgezlpfcr-awb-buttons" style="margin: 10px 0;">';
+
             // Download PDF link
             $download_url = admin_url('admin-post.php?' . http_build_query([
                 'action' => 'hgezlpfcr_download_awb',
@@ -2284,19 +2394,23 @@ class HGEZLPFCR_Admin_Order {
                 'hgezlpfcr_awb_nonce' => wp_create_nonce('hgezlpfcr_awb_actions')
             ]));
             echo '<a href="' . esc_url($download_url) . '" class="button">📄 Descarcă PDF</a> ';
-            
+
             // Sync status button (AJAX)
             $nonce = wp_create_nonce('hgezlpfcr_awb_ajax');
             echo '<button type="button" class="button fc-sync-awb-btn" data-order-id="' . esc_attr($order_id) . '" data-nonce="' . esc_attr($nonce) . '">🔄 Verifică AWB</button>';
-            
+
             echo '</div>';
+
+            // Status area for AJAX responses
+            echo '<div class="hgezlpfcr-awb-status" style="margin-top: 10px; display: none;"></div>';
             
         } elseif ($can_generate) {
             // Show generate AWB button
             echo '<p><strong>Status comandă:</strong> ' . esc_html($order_status) . '</p>';
             echo '<p><em>AWB nu a fost generat încă.</em></p>';
-            echo '<div class="fc-awb-buttons" style="margin: 10px 0;">';
-            echo '<button type="button" class="button button-primary fc-generate-awb-btn" data-order-id="' . esc_attr($order_id) . '">🚚 Generează AWB</button>';
+            echo '<div class="hgezlpfcr-awb-actions" style="margin: 10px 0;">';
+            echo '<button type="button" class="button button-primary hgezlpfcr-generate-awb-btn" data-order-id="' . esc_attr($order_id) . '">🚚 Generează AWB</button>';
+            echo '<div class="hgezlpfcr-awb-status" style="margin-top: 10px; display: none;"></div>';
             echo '</div>';
             
         } else {
