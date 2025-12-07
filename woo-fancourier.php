@@ -3,7 +3,7 @@
  * Plugin Name: HgE: Shipping Zones for FAN Courier Romania
  * Plugin URI: https://github.com/strictly4U/Zone-de-livrare-pentru-Fan-Courier-Romania.git
  * Description: WooCommerce shipping zones integration for FAN Courier Romania (Standard service). Manual AWB generation, PDF label display for orders, and AWB generation history.
- * Version: 1.0.3
+ * Version: 1.0.4
  * Requires at least: 5.0
  * Requires PHP: 8.1
  * Requires Plugins: woocommerce
@@ -16,7 +16,7 @@
 if (!defined('ABSPATH')) exit;
 
 define('HGEZLPFCR_PLUGIN_FILE', __FILE__);
-define('HGEZLPFCR_PLUGIN_VER', '1.0.3');
+define('HGEZLPFCR_PLUGIN_VER', '1.0.4');
 define('HGEZLPFCR_OPTION_GROUP', 'hgezlpfcr_settings');
 
 // HGEZLPFCR_LOG_ENABLED will be defined dynamically based on 'hgezlpfcr_debug' setting
