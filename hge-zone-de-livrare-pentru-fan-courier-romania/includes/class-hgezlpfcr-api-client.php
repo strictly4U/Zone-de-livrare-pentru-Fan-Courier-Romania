@@ -796,10 +796,19 @@ class HGEZLPFCR_API_Client {
         $service_map = [
             'Standard' => 1,
             'Cont Colector' => 4,
+            'FANbox' => 27,
+            'FANbox COD' => 28,
+            'Express Loco' => 3,
+            'Red Code' => 7,
         ];
 
-        $service_name = $params['service'] ?? 'Standard';
-        $service_type_id = $service_map[$service_name] ?? 1;
+        // Allow direct serviceTypeId to be passed (used by PRO plugin for extended services)
+        if (isset($params['serviceTypeId']) && is_numeric($params['serviceTypeId'])) {
+            $service_type_id = (int) $params['serviceTypeId'];
+        } else {
+            $service_name = $params['service'] ?? 'Standard';
+            $service_type_id = $service_map[$service_name] ?? 1;
+        }
 
         // Build eCommerce API request body
         $body = [
@@ -850,10 +859,19 @@ class HGEZLPFCR_API_Client {
         $service_map = [
             'Standard' => 1,
             'Cont Colector' => 4,
+            'FANbox' => 27,
+            'FANbox COD' => 28,
+            'Express Loco' => 3,
+            'Red Code' => 7,
         ];
 
-        $service_name = $params['service'] ?? 'Standard';
-        $service_type_id = $service_map[$service_name] ?? 1;
+        // Allow direct serviceTypeId to be passed (used by PRO plugin for extended services)
+        if (isset($params['serviceTypeId']) && is_numeric($params['serviceTypeId'])) {
+            $service_type_id = (int) $params['serviceTypeId'];
+        } else {
+            $service_name = $params['service'] ?? 'Standard';
+            $service_type_id = $service_map[$service_name] ?? 1;
+        }
 
         // Build eCommerce API request body
         $body = [
