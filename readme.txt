@@ -208,6 +208,14 @@ Currently, only Standard home/office delivery is supported. All other FAN Courie
 6. AWB history and tracking status in order details
 
 == Changelog ==
+= 1.0.4 - 2025-12-07 =
+* Code Quality: Standardized all meta keys to use `_hgezlpfcr_` prefix
+* Backward Compatibility: Added fallback reading for legacy `_fc_` meta keys
+* Added: Helper methods `get_awb_number()`, `get_awb_status()`, `get_awb_history()`, `get_awb_date()` with dual-key support
+* Added: Transient constants for AWB locks and cache with proper prefixing
+* Improved: Healthcheck cleans both new and legacy lock transients
+* Security: All new orders use standardized prefixed keys
+
 = 1.0.3 - 2024-10-22 =
 * More detailed logging for debugging through comprehensive error handling
 * Full synchronization between Standard and PRO plugin
@@ -247,6 +255,9 @@ Currently, only Standard home/office delivery is supported. All other FAN Courie
 * Comprehensive logging system
 
 == Upgrade Notice ==
+
+=1.0.4 =
+Code quality update with standardized meta key prefixes. Backward compatible - existing orders with legacy `_fc_` meta keys will continue to work.
 
 = 1.0.2 =
 Important security update. Please update immediately. This version fixes XSS and SQL injection vulnerabilities. FANBox functionality has been removed - plugin now supports Standard delivery only.

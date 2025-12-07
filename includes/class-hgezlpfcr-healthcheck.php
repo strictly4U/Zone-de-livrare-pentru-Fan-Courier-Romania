@@ -291,16 +291,18 @@ class HGEZLPFCR_Healthcheck {
 
         } elseif (isset($_POST['hc_action_clear_locks'])) {
             global $wpdb;
-            // Clear expired fc_awb_lock_* transients - WordPress cleans them anyway, but we can force it
+            // Clear both new and legacy lock transients
             // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Cleanup of transient locks requires direct query, caching not applicable for DELETE
             $wpdb->query(
                 $wpdb->prepare(
-                    "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s",
-                    $wpdb->esc_like('_transient_fc_awb_lock_') . '%',
-                    $wpdb->esc_like('_transient_timeout_fc_awb_lock_') . '%'
+                    "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s OR option_name LIKE %s OR option_name LIKE %s",
+                    $wpdb->esc_like('_transient_' . HGEZLPFCR_Admin_Order::TRANSIENT_LOCK_PREFIX) . '%',
+                    $wpdb->esc_like('_transient_timeout_' . HGEZLPFCR_Admin_Order::TRANSIENT_LOCK_PREFIX) . '%',
+                    $wpdb->esc_like('_transient_' . HGEZLPFCR_Admin_Order::LEGACY_LOCK_PREFIX) . '%',
+                    $wpdb->esc_like('_transient_timeout_' . HGEZLPFCR_Admin_Order::LEGACY_LOCK_PREFIX) . '%'
                 )
             );
-            $msg = 'Locks cleared.';
+            $msg = 'Locks cleared (both new and legacy).';
         } elseif (isset($_POST['hc_action_reset_deletion_markers'])) {
             // Reset AWB deletion markers from history for testing
             $orders = wc_get_orders([

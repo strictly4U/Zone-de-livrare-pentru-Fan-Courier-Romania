@@ -2,12 +2,90 @@
 if (!defined('ABSPATH')) exit;
 
 class HGEZLPFCR_Admin_Order {
-    const META_AWB      = '_fc_awb_number';
-    const META_STAT     = '_fc_awb_status';
-    const META_LOCK     = '_fc_awb_lock'; // idempotency lock
-    const META_HISTORY  = '_fc_awb_history'; // AWB action history
-    const META_AWB_DATE = '_fc_awb_generation_date'; // AWB generation date
+    // New standardized meta keys (as of v2.0.9)
+    const META_AWB      = '_hgezlpfcr_awb_number';
+    const META_STAT     = '_hgezlpfcr_awb_status';
+    const META_LOCK     = '_hgezlpfcr_awb_lock'; // idempotency lock
+    const META_HISTORY  = '_hgezlpfcr_awb_history'; // AWB action history
+    const META_AWB_DATE = '_hgezlpfcr_awb_generation_date'; // AWB generation date
     const LOCK_TTL      = 300; // 5 min
+
+    // Transient keys for locks and cache
+    const TRANSIENT_LOCK_PREFIX  = 'hgezlpfcr_awb_lock_';  // New standardized prefix
+    const TRANSIENT_CACHE_PREFIX = 'hgezlpfcr_awb_cache_'; // For AWB existence cache
+    const LEGACY_LOCK_PREFIX     = 'fc_awb_lock_';         // Legacy for cleanup
+
+    // Legacy meta keys (for backward compatibility with existing orders)
+    const LEGACY_META_AWB      = '_fc_awb_number';
+    const LEGACY_META_STAT     = '_fc_awb_status';
+    const LEGACY_META_LOCK     = '_fc_awb_lock';
+    const LEGACY_META_HISTORY  = '_fc_awb_history';
+    const LEGACY_META_AWB_DATE = '_fc_awb_generation_date';
+
+    /**
+     * Get AWB number from order (checks both new and legacy meta keys)
+     *
+     * @param WC_Order $order The order object
+     * @return string AWB number or empty string
+     */
+    public static function get_awb_number($order) {
+        // Try new key first
+        $awb = $order->get_meta(self::META_AWB);
+        if (!empty($awb)) {
+            return $awb;
+        }
+        // Fallback to legacy key
+        return $order->get_meta(self::LEGACY_META_AWB) ?: '';
+    }
+
+    /**
+     * Get AWB status from order (checks both new and legacy meta keys)
+     *
+     * @param WC_Order $order The order object
+     * @return string AWB status or empty string
+     */
+    public static function get_awb_status($order) {
+        // Try new key first
+        $status = $order->get_meta(self::META_STAT);
+        if (!empty($status)) {
+            return $status;
+        }
+        // Fallback to legacy key
+        return $order->get_meta(self::LEGACY_META_STAT) ?: '';
+    }
+
+    /**
+     * Get AWB history from order (checks both new and legacy meta keys)
+     *
+     * @param WC_Order $order The order object
+     * @return array AWB history array or empty array
+     */
+    public static function get_awb_history($order) {
+        // Try new key first
+        $history = $order->get_meta(self::META_HISTORY);
+        if (!empty($history) && is_array($history)) {
+            return $history;
+        }
+        // Fallback to legacy key
+        $legacy = $order->get_meta(self::LEGACY_META_HISTORY);
+        return (is_array($legacy) && !empty($legacy)) ? $legacy : [];
+    }
+
+    /**
+     * Get AWB generation date from order (checks both new and legacy meta keys)
+     *
+     * @param WC_Order $order The order object
+     * @return string AWB generation date or empty string
+     */
+    public static function get_awb_date($order) {
+        // Try new key first
+        $date = $order->get_meta(self::META_AWB_DATE);
+        if (!empty($date)) {
+            return $date;
+        }
+        // Fallback to legacy key
+        return $order->get_meta(self::LEGACY_META_AWB_DATE) ?: '';
+    }
     
     /**
      * Get current date adjusted for FanCourier server timezone (+3 hours)
@@ -762,7 +840,7 @@ class HGEZLPFCR_Admin_Order {
             as_enqueue_async_action('hgezlpfcr_generate_awb_async', [$order_id], 'woo-fancourier');
         } else {
             // Delay execution to not interfere with status change process
-            wp_schedule_single_event(time() + 5, 'fc_delayed_awb_generation', [$order_id]);
+            wp_schedule_single_event(time() + 5, 'hgezlpfcr_delayed_awb_generation', [$order_id]);
         }
     }
 
@@ -882,7 +960,7 @@ class HGEZLPFCR_Admin_Order {
         }
 
         // Acquire lock (transient per order)
-        $lock_key = 'fc_awb_lock_' . $order_id;
+        $lock_key = self::TRANSIENT_LOCK_PREFIX . $order_id;
         $token = wp_generate_password(12, false);
         if (!self::acquire_lock($lock_key, $token)) {
             HGEZLPFCR_Logger::log('Could not acquire lock', ['order_id' => $order_id, 'lock_key' => $lock_key]);
@@ -2572,7 +2650,7 @@ class HGEZLPFCR_Admin_Order {
         ]);
         
         // Cache the result for performance
-        $cache_key = 'fc_awb_exists_' . $order->get_id();
+        $cache_key = self::TRANSIENT_CACHE_PREFIX . 'exists_' . $order->get_id();
         $cache_duration = 30 * MINUTE_IN_SECONDS; // 30 minutes cache
         
         // Don't restore if API error or AWB doesn't exist
@@ -2678,7 +2756,7 @@ class HGEZLPFCR_Admin_Order {
     /** Fast cached AWB restoration - no API calls */
     protected static function restore_awb_from_history_cached(WC_Order $order): ?string {
         // Check cache first
-        $cache_key = 'fc_awb_exists_' . $order->get_id();
+        $cache_key = self::TRANSIENT_CACHE_PREFIX . 'exists_' . $order->get_id();
         $cached_result = get_transient($cache_key);
         
         if ($cached_result !== false) {
