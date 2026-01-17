@@ -5,7 +5,7 @@ Tags: shipping zones, romania, fan courier, woocommerce, awb
 Requires at least: 5.0
 Tested up to: 6.9
 Requires PHP: 8.1
-Stable tag: 1.0.4
+Stable tag: 1.0.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -208,6 +208,14 @@ Currently, only Standard home/office delivery is supported. All other FAN Courie
 6. AWB history and tracking status in order details
 
 == Changelog ==
+= 1.0.5 - 2025-12-07 =
+* Enhanced: Logger class now supports all PSR-3 log levels (emergency, alert, critical, error, warning, notice, info, debug)
+* Added: New logging methods - `warning()`, `critical()`, `alert()`, `emergency()`, `notice()`, `debug()`, `info()`
+* Improved: Centralized sensitive data sanitization in Logger (passwords, API keys, tokens, secrets)
+* Improved: `warning()` and `error()` levels are always logged regardless of debug setting
+* Code Quality: Better code organization with private helper methods in Logger class
+* Documentation: Added comprehensive PHPDoc comments to Logger class
+
 = 1.0.4 - 2025-12-07 =
 * Code Quality: Standardized all meta keys to use `_hgezlpfcr_` prefix
 * Backward Compatibility: Added fallback reading for legacy `_fc_` meta keys
@@ -256,7 +264,10 @@ Currently, only Standard home/office delivery is supported. All other FAN Courie
 
 == Upgrade Notice ==
 
-=1.0.4 =
+= 1.0.5 =
+Logger enhancement with PSR-3 compatible log levels. Enables better debugging and monitoring. Fully backward compatible.
+
+= 1.0.4 =
 Code quality update with standardized meta key prefixes. Backward compatible - existing orders with legacy `_fc_` meta keys will continue to work.
 
 = 1.0.2 =
