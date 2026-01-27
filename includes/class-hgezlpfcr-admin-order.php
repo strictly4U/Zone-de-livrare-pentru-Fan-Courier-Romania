@@ -184,8 +184,8 @@ class HGEZLPFCR_Admin_Order {
 
     public static function render_box($post) {
         $order = wc_get_order($post->ID);
-        $awb   = $order->get_meta(self::META_AWB);
-        $stat  = $order->get_meta(self::META_STAT);
+        $awb   = self::get_awb_number($order);
+        $stat  = self::get_awb_status($order);
         $order_status = $order->get_status();
 
         // Check if AWB generation is allowed for this status
@@ -229,11 +229,12 @@ class HGEZLPFCR_Admin_Order {
         
         $order = wc_get_order($post->ID);
         if (!$order) return;
-        
-        $awb = $order->get_meta(self::META_AWB);
-        $status = $order->get_meta(self::META_STAT);
+
+        // Use helper functions to check both new and legacy meta keys
+        $awb = self::get_awb_number($order);
+        $status = self::get_awb_status($order);
         $order_status = $order->get_status();
-        
+
         // Debug: Log metabox render data
         if ($awb) {
             self::debug_awb_data($post->ID, 'Metabox render - AWB exists');
@@ -260,8 +261,8 @@ class HGEZLPFCR_Admin_Order {
                         // Re-fetch fresh data after force delete
                         self::clear_order_caches($post->ID);
                         $order = wc_get_order($post->ID);
-                        $awb = $order->get_meta(self::META_AWB);
-                        $status = $order->get_meta(self::META_STAT);
+                        $awb = self::get_awb_number($order);
+                        $status = self::get_awb_status($order);
                     }
                     break;
                 }
@@ -396,8 +397,9 @@ class HGEZLPFCR_Admin_Order {
         $order = wc_get_order($post->ID);
         if (!$order) return;
 
-        $history = $order->get_meta(self::META_HISTORY);
-        if (!$history || !is_array($history)) {
+        // Use helper function to check both new and legacy meta keys
+        $history = self::get_awb_history($order);
+        if (empty($history)) {
             echo '<p><em>Nu există istoric pentru această comandă.</em></p>';
             return;
         }
@@ -499,13 +501,14 @@ class HGEZLPFCR_Admin_Order {
         
         $order = wc_get_order($post_id);
         if (!$order) return;
-        
-        $awb = $order->get_meta(self::META_AWB);
-        $status = $order->get_meta(self::META_STAT);
+
+        // Use helper functions to check both new and legacy meta keys
+        $awb = self::get_awb_number($order);
+        $status = self::get_awb_status($order);
         $order_status = $order->get_status();
-        
+
         // Check if AWB was deleted from FanCourier before attempting to restore from history
-        $history = $order->get_meta(self::META_HISTORY);
+        $history = self::get_awb_history($order);
         $awb_was_deleted = false;
         
         if (is_array($history) && !empty($history)) {
@@ -585,13 +588,14 @@ class HGEZLPFCR_Admin_Order {
             $order = wc_get_order($order);
         }
         if (!$order) return;
-        
-        $awb = $order->get_meta(self::META_AWB);
-        $status = $order->get_meta(self::META_STAT);
+
+        // Use helper functions to check both new and legacy meta keys
+        $awb = self::get_awb_number($order);
+        $status = self::get_awb_status($order);
         $order_status = $order->get_status();
-        
+
         // Check if AWB was deleted from FanCourier before attempting to restore from history
-        $history = $order->get_meta(self::META_HISTORY);
+        $history = self::get_awb_history($order);
         $awb_was_deleted = false;
         
         if (is_array($history) && !empty($history)) {
@@ -712,7 +716,8 @@ class HGEZLPFCR_Admin_Order {
                 continue;
             }
 
-            if ($order->get_meta(self::META_AWB)) {
+            // Use helper function to check both new and legacy meta keys
+            if (self::get_awb_number($order)) {
                 continue; // Already has AWB
             }
 
@@ -771,6 +776,12 @@ class HGEZLPFCR_Admin_Order {
 
     /** AWB History logging */
     protected static function log_awb_action($order_id, $action, $details = '', $custom_user = '') {
+        // Clear WooCommerce order cache to ensure fresh read
+        // This is important when called immediately after $order->save()
+        // @since 1.0.6 Added cache clearing for HPOS compatibility
+        wp_cache_delete($order_id, 'orders');
+        wp_cache_delete('order-items-' . $order_id, 'orders');
+
         $order = wc_get_order($order_id);
         if (!$order) return;
 
@@ -794,12 +805,10 @@ class HGEZLPFCR_Admin_Order {
             'details' => $details,
             'ip' => isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])) : 'Unknown'
         ];
-        
-        $history = $order->get_meta(self::META_HISTORY);
-        if (!is_array($history)) {
-            $history = [];
-        }
-        
+
+        // Use helper function to get existing history (checks both new and legacy meta keys)
+        $history = self::get_awb_history($order);
+
         $history[] = $history_entry;
         $order->update_meta_data(self::META_HISTORY, $history);
         $order->save();
@@ -829,8 +838,8 @@ class HGEZLPFCR_Admin_Order {
         // Check if auto AWB should be generated for this order status using new system
         if (!HGEZLPFCR_Settings::should_auto_generate_awb($order->get_status())) return;
 
-        // Skip if AWB already exists
-        if ($order->get_meta(self::META_AWB)) return;
+        // Skip if AWB already exists (check both new and legacy meta keys)
+        if (self::get_awb_number($order)) return;
 
         // Log automatic generation attempt
         self::log_awb_action($order_id, 'Generare AWB Automată', 'Declanșată la schimbarea status-ului în: ' . $order->get_status());
@@ -943,9 +952,10 @@ class HGEZLPFCR_Admin_Order {
             }
         }
         
-        // If already has AWB and it wasn't deleted, skip
-        if ($order->get_meta(self::META_AWB) && !$awb_was_deleted) {
-            HGEZLPFCR_Logger::log('AWB already exists, skipping', ['order_id' => $order_id, 'awb' => $order->get_meta(self::META_AWB)]);
+        // If already has AWB and it wasn't deleted, skip (check both new and legacy meta keys)
+        $existing_awb = self::get_awb_number($order);
+        if ($existing_awb && !$awb_was_deleted) {
+            HGEZLPFCR_Logger::log('AWB already exists, skipping', ['order_id' => $order_id, 'awb' => $existing_awb]);
             if ($redirect) self::admin_notice('AWB deja existent.', 'warning', $order_id);
             return true; // AWB already exists
         }
@@ -1520,18 +1530,19 @@ class HGEZLPFCR_Admin_Order {
             self::admin_notice('Comandă invalidă.', 'error', $order_id);
             return;
         }
-        
-        $awb = $order->get_meta(self::META_AWB);
+
+        // Use helper function for legacy meta key compatibility
+        $awb = self::get_awb_number($order);
         if (!$awb) {
             // Log the failed download attempt
             self::log_awb_action($order_id, 'Eroare Descărcare PDF', 'AWB inexistent pentru descărcare');
             self::admin_notice('AWB inexistent pentru această comandă.', 'error', $order_id);
             return;
         }
-        
+
         // Log the download attempt
         self::log_awb_action($order_id, 'Descărcare PDF AWB', 'Încercare descărcare PDF pentru AWB: ' . $awb);
-        
+
         try {
             $api = new HGEZLPFCR_API_Client();
             $res = $api->get_awb_pdf($awb);
@@ -1634,8 +1645,9 @@ class HGEZLPFCR_Admin_Order {
 
         $order = wc_get_order($order_id);
         if ($order) {
-            $awb = $order->get_meta(self::META_AWB);
-            $generation_date = $order->get_meta(self::META_AWB_DATE) ?: gmdate('Y-m-d');
+            // Use helper functions for legacy meta key compatibility
+            $awb = self::get_awb_number($order);
+            $generation_date = self::get_awb_date($order) ?: gmdate('Y-m-d');
             $generation_date = self::adjust_date_for_fancourier($generation_date);
 
             // Pas 1: User solicită verificarea (apare cu numele real al user-ului)
@@ -1696,11 +1708,12 @@ class HGEZLPFCR_Admin_Order {
             return;
         }
 
-        $awb = $order->get_meta(self::META_AWB);
+        // Use helper functions for legacy meta key compatibility
+        $awb = self::get_awb_number($order);
         if (!$awb) { if ($redirect) self::admin_notice('Fără AWB.', 'warning', $order_id); return; }
 
         // Get AWB generation date
-        $generation_date = $order->get_meta(self::META_AWB_DATE);
+        $generation_date = self::get_awb_date($order);
         if (!$generation_date) {
             // Fallback: try to get date from history if not stored in meta
             $awb_data = self::get_awb_from_history($order);
@@ -1868,8 +1881,9 @@ class HGEZLPFCR_Admin_Order {
             HGEZLPFCR_Logger::error('Invalid order for AWB deletion', ['order_id' => $order_id]);
             return false;
         }
-        
-        $awb = $order->get_meta(self::META_AWB);
+
+        // Use helper function to check both new and legacy meta keys
+        $awb = self::get_awb_number($order);
         if (!$awb) {
             HGEZLPFCR_Logger::log('No AWB to delete from order', ['order_id' => $order_id]);
             return true; // No AWB exists, consider it success
@@ -2086,13 +2100,13 @@ class HGEZLPFCR_Admin_Order {
             'db_results' => $meta_results
         ]);
         
-        // Test WooCommerce order object
+        // Test WooCommerce order object using helper functions (checks both new and legacy keys)
         clean_post_cache($order_id);
         $order = wc_get_order($order_id);
         if ($order) {
-            $awb_meta = $order->get_meta(self::META_AWB);
-            $stat_meta = $order->get_meta(self::META_STAT);
-            
+            $awb_meta = self::get_awb_number($order);
+            $stat_meta = self::get_awb_status($order);
+
             HGEZLPFCR_Logger::log("DEBUG - WooCommerce object results", [
                 'order_id' => $order_id,
                 'awb_meta' => $awb_meta,
@@ -2256,9 +2270,10 @@ class HGEZLPFCR_Admin_Order {
             }
         }
         
-        // Check if AWB already exists and it wasn't deleted
-        if ($order->get_meta(self::META_AWB) && !$awb_was_deleted) {
-            HGEZLPFCR_Logger::log('AWB already exists', ['order_id' => $order_id, 'awb' => $order->get_meta(self::META_AWB)]);
+        // Check if AWB already exists and it wasn't deleted (check both new and legacy meta keys)
+        $existing_awb = self::get_awb_number($order);
+        if ($existing_awb && !$awb_was_deleted) {
+            HGEZLPFCR_Logger::log('AWB already exists', ['order_id' => $order_id, 'awb' => $existing_awb]);
             wp_send_json_error('AWB deja existent pentru această comandă.');
         }
         
@@ -2323,11 +2338,11 @@ class HGEZLPFCR_Admin_Order {
                 wp_send_json_error($e->getMessage());
             }
             
-            // Get updated order data
+            // Get updated order data using helper functions for legacy compatibility
             $order = wc_get_order($order_id);
-            $awb = $order->get_meta(self::META_AWB);
-            $status = $order->get_meta(self::META_STAT);
-            
+            $awb = self::get_awb_number($order);
+            $status = self::get_awb_status($order);
+
             HGEZLPFCR_Logger::log('Order meta after AWB generation', ['order_id' => $order_id, 'awb' => $awb, 'status' => $status]);
             
             if ($awb) {
@@ -2378,7 +2393,8 @@ class HGEZLPFCR_Admin_Order {
             wp_send_json_error('Comandă invalidă.');
         }
 
-        $awb_before_sync = $order->get_meta(self::META_AWB);
+        // Use helper functions for legacy meta key compatibility
+        $awb_before_sync = self::get_awb_number($order);
         if (!$awb_before_sync) {
             HGEZLPFCR_Logger::error('No AWB found to sync', ['order_id' => $order_id]);
             wp_send_json_error('Nu există AWB pentru această comandă.');
@@ -2398,7 +2414,7 @@ class HGEZLPFCR_Admin_Order {
         $order->save();
 
         // Pas 1: User solicită verificarea prin AJAX (apare cu numele real al user-ului)
-        $generation_date = $order->get_meta(self::META_AWB_DATE) ?: gmdate('Y-m-d');
+        $generation_date = self::get_awb_date($order) ?: gmdate('Y-m-d');
         $generation_date = self::adjust_date_for_fancourier($generation_date);
         self::log_awb_action($order_id, 'Plugin-ul: HgE Fan Courier a preluat cererea', 'S-a cerut verificare AWB: ' . $awb_before_sync . ' (Data FanCourier: ' . $generation_date . ')');
 
@@ -2409,10 +2425,10 @@ class HGEZLPFCR_Admin_Order {
             // Call existing sync function
             self::sync_status_for_order($order_id, false); // No redirect for AJAX
             
-            // Refresh order data to get updated status
+            // Refresh order data to get updated status using helper functions
             $order = wc_get_order($order_id);
-            $awb_after_sync = $order->get_meta(self::META_AWB);
-            $status = $order->get_meta(self::META_STAT);
+            $awb_after_sync = self::get_awb_number($order);
+            $status = self::get_awb_status($order);
             
             if ($awb_after_sync) {
                 // AWB still exists - sync was successful
@@ -2447,9 +2463,10 @@ class HGEZLPFCR_Admin_Order {
     private static function get_awb_actions_html($order_id) {
         $order = wc_get_order($order_id);
         if (!$order) return '';
-        
-        $awb = $order->get_meta(self::META_AWB);
-        $status = $order->get_meta(self::META_STAT);
+
+        // Use helper functions for legacy meta key compatibility
+        $awb = self::get_awb_number($order);
+        $status = self::get_awb_status($order);
         $order_status = $order->get_status();
         $allowed_statuses = ['processing', 'comanda-noua', 'completed', 'plata-confirmata', 'emite-factura-avans'];
         $can_generate = in_array($order_status, $allowed_statuses);

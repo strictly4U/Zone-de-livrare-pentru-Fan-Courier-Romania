@@ -1,11 +1,11 @@
 === HgE: Shipping Zones for FAN Courier Romania ===
-Contributors: hge321, hurubarugeorge
+Contributors: hge321
 Donate link: https://www.linkedin.com/in/hurubarugeorgesemanuel/
 Tags: shipping zones, romania, fan courier, woocommerce, awb
 Requires at least: 5.0
 Tested up to: 6.9
 Requires PHP: 8.1
-Stable tag: 1.0.5
+Stable tag: 1.0.6
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -208,6 +208,14 @@ Currently, only Standard home/office delivery is supported. All other FAN Courie
 6. AWB history and tracking status in order details
 
 == Changelog ==
+= 1.0.6 - 2026-01-27 =
+* Added: Formal HPOS (High-Performance Order Storage) compatibility declaration
+* Fixed: AWB history not saving correctly when HPOS is enabled
+* Fixed: Order meta data caching issues with HPOS
+* Improved: `log_awb_action()` now clears order cache before reading to ensure fresh data
+* Improved: All AWB read operations use helper functions for legacy meta key compatibility
+* Compatibility: Tested with WooCommerce 9.7 HPOS mode
+
 = 1.0.5 - 2025-12-07 =
 * Enhanced: Logger class now supports all PSR-3 log levels (emergency, alert, critical, error, warning, notice, info, debug)
 * Added: New logging methods - `warning()`, `critical()`, `alert()`, `emergency()`, `notice()`, `debug()`, `info()`
@@ -263,6 +271,9 @@ Currently, only Standard home/office delivery is supported. All other FAN Courie
 * Comprehensive logging system
 
 == Upgrade Notice ==
+
+= 1.0.6 =
+Critical HPOS compatibility fix. If you're using WooCommerce with HPOS enabled, this update ensures AWB history saves correctly. Required for HgE PRO plugin v2.0.8+.
 
 = 1.0.5 =
 Logger enhancement with PSR-3 compatible log levels. Enables better debugging and monitoring. Fully backward compatible.
@@ -378,7 +389,7 @@ This plugin is open source. Contributions are welcome via GitHub.
 
 This plugin is licensed under GPLv2 or later.
 
-Copyright (C) 2024 Hurubaru George Emanuel
+Copyright (C) 2024-2026 Hurubaru George Emanuel
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
