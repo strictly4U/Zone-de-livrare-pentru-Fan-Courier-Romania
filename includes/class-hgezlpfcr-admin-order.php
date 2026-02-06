@@ -23,6 +23,56 @@ class HGEZLPFCR_Admin_Order {
     const LEGACY_META_AWB_DATE = '_fc_awb_generation_date';
 
     /**
+     * Get order object from post or order parameter (HPOS compatibility)
+     *
+     * With HPOS enabled, WooCommerce passes WC_Order objects directly to meta box callbacks.
+     * With legacy storage, it passes WP_Post objects.
+     * This helper handles both cases transparently.
+     *
+     * @param WP_Post|WC_Order|int $post_or_order Post object, Order object, or Order ID
+     * @return WC_Order|false Order object or false if not found
+     * @since 1.0.7
+     */
+    public static function get_order_from_post_or_order($post_or_order) {
+        if ($post_or_order instanceof \WC_Order) {
+            return $post_or_order;
+        }
+
+        if ($post_or_order instanceof \WP_Post) {
+            return wc_get_order($post_or_order->ID);
+        }
+
+        if (is_numeric($post_or_order)) {
+            return wc_get_order($post_or_order);
+        }
+
+        return false;
+    }
+
+    /**
+     * Get order ID from post or order parameter (HPOS compatibility)
+     *
+     * @param WP_Post|WC_Order|int $post_or_order Post object, Order object, or Order ID
+     * @return int|false Order ID or false if not found
+     * @since 1.0.7
+     */
+    public static function get_order_id_from_post_or_order($post_or_order) {
+        if ($post_or_order instanceof \WC_Order) {
+            return $post_or_order->get_id();
+        }
+
+        if ($post_or_order instanceof \WP_Post) {
+            return $post_or_order->ID;
+        }
+
+        if (is_numeric($post_or_order)) {
+            return (int) $post_or_order;
+        }
+
+        return false;
+    }
+
+    /**
      * Get AWB number from order (checks both new and legacy meta keys)
      *
      * @param WC_Order $order The order object
@@ -107,16 +157,22 @@ class HGEZLPFCR_Admin_Order {
     }
 
     public static function init() {
-        // Meta boxes pe ecranul clasic al comenzii
+        // Meta boxes - use generic hook for HPOS compatibility
+        // The screen detection is done inside add_awb_meta_boxes()
+        add_action('add_meta_boxes', [__CLASS__, 'add_awb_meta_boxes'], 35);
+
+        // Also register for specific screens as fallback (legacy support)
         add_action('add_meta_boxes_shop_order', [__CLASS__, 'add_awb_meta_boxes'], 35);
 
-        // Meta boxes pe ecranul HPOS (dacă e activ)
-        if (function_exists('wc_get_page_screen_id')) {
-            add_action('add_meta_boxes_' . wc_get_page_screen_id('shop-order'), [__CLASS__, 'add_awb_meta_boxes'], 35);
-        }
-
-        // Add meta boxes with safer implementation and priority
-        // add_action('add_meta_boxes', [__CLASS__, 'add_awb_meta_boxes'], 35);
+        // HPOS-specific hook (registers late to ensure wc_get_page_screen_id works)
+        add_action('woocommerce_init', function() {
+            if (function_exists('wc_get_page_screen_id')) {
+                $hpos_screen = wc_get_page_screen_id('shop-order');
+                if ($hpos_screen && $hpos_screen !== 'shop_order') {
+                    add_action('add_meta_boxes_' . $hpos_screen, [__CLASS__, 'add_awb_meta_boxes'], 35);
+                }
+            }
+        });
 
         // Actions via POST - keep these active
         add_action('admin_post_hgezlpfcr_generate_awb', [__CLASS__, 'handle_generate_awb']);
@@ -156,34 +212,107 @@ class HGEZLPFCR_Admin_Order {
          add_action('admin_post_hgezlpfcr_reset_order_markers', [__CLASS__, 'handle_reset_order_markers']);
     }
 
+    /**
+     * Add AWB meta boxes to order edit screen
+     * Supports both HPOS (High-Performance Order Storage) and legacy post-based storage
+     *
+     * @since 1.0.7 - Updated for robust HPOS compatibility
+     */
     public static function add_awb_meta_boxes() {
         $screen = get_current_screen();
-        if (!$screen) return;
-        
-        // Only add meta boxes on order edit pages
-        if (in_array($screen->id, ['shop_order', 'woocommerce_page_wc-orders'])) {
-            add_meta_box(
-                'hgezlpfcr_awb_actions',
-                'Fan Courier – AWB & Acțiuni',
-                [__CLASS__, 'render_awb_actions_box'],
-                $screen->id,
-                'side',
-                'high'
-            );
 
-            add_meta_box(
-                'hgezlpfcr_awb_history',
-                'Fan Courier – Istoric AWB',
-                [__CLASS__, 'render_awb_history_box'],
-                $screen->id,
-                'normal',
-                'default'
-            );
+        // Debug: Log screen detection
+        if (class_exists('HGEZLPFCR_Logger')) {
+            HGEZLPFCR_Logger::log('Meta box registration attempt', [
+                'screen_exists' => $screen ? 'yes' : 'no',
+                'screen_id' => $screen ? $screen->id : 'null',
+                'screen_base' => $screen ? $screen->base : 'null',
+                'screen_action' => $screen ? $screen->action : 'null',
+            ]);
         }
+
+        if (!$screen) return;
+
+        // Build list of valid order edit screen IDs
+        $valid_screens = ['shop_order'];
+
+        // Add HPOS screen if available
+        if (function_exists('wc_get_page_screen_id')) {
+            $hpos_screen = wc_get_page_screen_id('shop-order');
+            if ($hpos_screen && !in_array($hpos_screen, $valid_screens)) {
+                $valid_screens[] = $hpos_screen;
+            }
+        }
+
+        // Also check for the standard HPOS screen name
+        if (!in_array('woocommerce_page_wc-orders', $valid_screens)) {
+            $valid_screens[] = 'woocommerce_page_wc-orders';
+        }
+
+        // Debug: Log valid screens
+        if (class_exists('HGEZLPFCR_Logger')) {
+            HGEZLPFCR_Logger::log('Meta box screen validation', [
+                'current_screen' => $screen->id,
+                'valid_screens' => $valid_screens,
+                'is_valid' => in_array($screen->id, $valid_screens) ? 'yes' : 'no',
+            ]);
+        }
+
+        // Check if current screen is an order edit page
+        if (!in_array($screen->id, $valid_screens)) {
+            return;
+        }
+
+        // Prevent duplicate meta boxes (can happen with multiple hooks)
+        static $meta_boxes_added = false;
+        if ($meta_boxes_added) {
+            if (class_exists('HGEZLPFCR_Logger')) {
+                HGEZLPFCR_Logger::log('Meta boxes already added, skipping duplicate registration');
+            }
+            return;
+        }
+        $meta_boxes_added = true;
+
+        // Log successful registration
+        if (class_exists('HGEZLPFCR_Logger')) {
+            HGEZLPFCR_Logger::log('Adding AWB meta boxes to order screen', [
+                'screen_id' => $screen->id,
+            ]);
+        }
+
+        // Add AWB Actions meta box (sidebar)
+        add_meta_box(
+            'hgezlpfcr_awb_actions',
+            'Fan Courier – AWB & Acțiuni',
+            [__CLASS__, 'render_awb_actions_box'],
+            $screen->id,
+            'side',
+            'high'
+        );
+
+        // Add AWB History meta box (main area)
+        add_meta_box(
+            'hgezlpfcr_awb_history',
+            'Fan Courier – Istoric AWB',
+            [__CLASS__, 'render_awb_history_box'],
+            $screen->id,
+            'normal',
+            'default'
+        );
     }
 
-    public static function render_box($post) {
-        $order = wc_get_order($post->ID);
+    /**
+     * Render legacy AWB box (kept for backward compatibility)
+     *
+     * @param WP_Post|WC_Order $post_or_order Post object (legacy) or Order object (HPOS)
+     * @since 1.0.7 - Updated for HPOS compatibility
+     */
+    public static function render_box($post_or_order) {
+        // HPOS compatibility: handle both WP_Post and WC_Order objects
+        $order = self::get_order_from_post_or_order($post_or_order);
+        if (!$order) return;
+
+        $order_id = $order->get_id();
         $awb   = self::get_awb_number($order);
         $stat  = self::get_awb_status($order);
         $order_status = $order->get_status();
@@ -206,7 +335,7 @@ class HGEZLPFCR_Admin_Order {
         } elseif (!$awb) {
             echo '<form method="post" action="'.esc_url(admin_url('admin-post.php')).'">';
             wp_nonce_field('hgezlpfcr_awb_actions', 'hgezlpfcr_awb_nonce');
-            echo '<input type="hidden" name="post_id" value="'.esc_attr($post->ID).'">';
+            echo '<input type="hidden" name="post_id" value="'.esc_attr($order_id).'">';
             echo '<input type="hidden" name="action" value="hgezlpfcr_generate_awb">';
             echo '<p><button class="button button-primary" type="submit">Generează AWB</button></p>';
             echo '</form>';
@@ -215,7 +344,7 @@ class HGEZLPFCR_Admin_Order {
         if ($awb) {
             echo '<form method="post" action="'.esc_url(admin_url('admin-post.php')).'">';
             wp_nonce_field('hgezlpfcr_awb_actions', 'hgezlpfcr_awb_nonce');
-            echo '<input type="hidden" name="post_id" value="'.esc_attr($post->ID).'">';
+            echo '<input type="hidden" name="post_id" value="'.esc_attr($order_id).'">';
             echo '<input type="hidden" name="action" value="hgezlpfcr_download_awb">';
             echo '<p><button class="button" type="submit">Descarcă PDF</button></p>';
             echo '</form>';
@@ -223,11 +352,48 @@ class HGEZLPFCR_Admin_Order {
         }
     }
 
-        public static function render_awb_actions_box($post) {
+    /**
+     * Render AWB actions meta box
+     *
+     * @param WP_Post|WC_Order $post_or_order Post object (legacy) or Order object (HPOS)
+     * @since 1.0.7 - Updated for HPOS compatibility
+     */
+    public static function render_awb_actions_box($post_or_order) {
+        // Debug: Log what we received
+        if (class_exists('HGEZLPFCR_Logger')) {
+            HGEZLPFCR_Logger::log('render_awb_actions_box called', [
+                'param_type' => is_object($post_or_order) ? get_class($post_or_order) : gettype($post_or_order),
+                'is_wc_order' => ($post_or_order instanceof \WC_Order) ? 'yes' : 'no',
+                'is_wp_post' => ($post_or_order instanceof \WP_Post) ? 'yes' : 'no',
+            ]);
+        }
+
+        // HPOS compatibility: handle both WP_Post and WC_Order objects
+        $order = self::get_order_from_post_or_order($post_or_order);
+        if (!$order) {
+            if (class_exists('HGEZLPFCR_Logger')) {
+                HGEZLPFCR_Logger::error('render_awb_actions_box: Could not get order from parameter', [
+                    'param_type' => is_object($post_or_order) ? get_class($post_or_order) : gettype($post_or_order),
+                ]);
+            }
+            echo '<p style="color: red;">Eroare: Nu s-a putut încărca comanda.</p>';
+            return;
+        }
+
+        $order_id = $order->get_id();
+
+        // Debug: Log successful order load
+        if (class_exists('HGEZLPFCR_Logger')) {
+            HGEZLPFCR_Logger::log('render_awb_actions_box: Order loaded successfully', [
+                'order_id' => $order_id,
+            ]);
+        }
+
         // Force fresh data - clear any cached order data safely
-        self::clear_order_caches($post->ID);
-        
-        $order = wc_get_order($post->ID);
+        self::clear_order_caches($order_id);
+
+        // Re-fetch order after cache clear to ensure fresh data
+        $order = wc_get_order($order_id);
         if (!$order) return;
 
         // Use helper functions to check both new and legacy meta keys
@@ -237,13 +403,13 @@ class HGEZLPFCR_Admin_Order {
 
         // Debug: Log metabox render data
         if ($awb) {
-            self::debug_awb_data($post->ID, 'Metabox render - AWB exists');
+            self::debug_awb_data($order_id, 'Metabox render - AWB exists');
         }
-        
+
         // Verifică istoricul pentru a determina dacă AWB-ul a fost șters din FanCourier
         $history = $order->get_meta(self::META_HISTORY);
         $awb_was_deleted = false;
-        
+
         // Verifică dacă există o ștergere forțată recentă (în ultimele 5 minute)
         if (is_array($history) && !empty($history)) {
             foreach (array_reverse($history) as $entry) {
@@ -252,15 +418,15 @@ class HGEZLPFCR_Admin_Order {
                     // Dacă ștergerea a fost în ultimele 5 minute și încă există AWB în meta, forțează ștergerea din nou
                     if ($entry_time && (time() - $entry_time) < 300 && $awb) { // 5 minute = 300 secunde
                         HGEZLPFCR_Logger::log('Force cleaning AWB after recent deletion', [
-                            'order_id' => $post->ID,
+                            'order_id' => $order_id,
                             'awb' => $awb,
                             'entry_time' => $entry_time,
                             'current_time' => time()
                         ]);
-                        self::force_delete_awb_from_order($post->ID, 'Metabox: Curățare după ștergere recentă');
+                        self::force_delete_awb_from_order($order_id, 'Metabox: Curățare după ștergere recentă');
                         // Re-fetch fresh data after force delete
-                        self::clear_order_caches($post->ID);
-                        $order = wc_get_order($post->ID);
+                        self::clear_order_caches($order_id);
+                        $order = wc_get_order($order_id);
                         $awb = self::get_awb_number($order);
                         $status = self::get_awb_status($order);
                     }
@@ -268,7 +434,7 @@ class HGEZLPFCR_Admin_Order {
                 }
             }
         }
-        
+
         if (is_array($history) && !empty($history)) {
             // Caută ultima acțiune din istoric
             $latest_action = null;
@@ -278,23 +444,23 @@ class HGEZLPFCR_Admin_Order {
                     break;
                 }
             }
-            
+
             // Dacă ultima acțiune este "AWB Șters", AWB-ul a fost șters din FanCourier
             if ($latest_action === 'AWB Șters') {
                 $awb_was_deleted = true;
                 // Șterge AWB-ul din meta data dacă există folosind metoda forțată
                 if ($awb) {
-                    self::force_delete_awb_from_order($post->ID, 'Metabox cleanup: AWB șters din istoric');
+                    self::force_delete_awb_from_order($order_id, 'Metabox cleanup: AWB șters din istoric');
                     $awb = null;
                     $status = null;
                 }
             }
         }
-        
+
         // Check if AWB exists in history but not in meta data (doar dacă nu a fost șters)
         if (!$awb && !$awb_was_deleted) {
             $should_restore = true;
-            
+
             if (is_array($history) && !empty($history)) {
                 // Caută ultima acțiune din istoric - verifică și ștergerea forțată
                 $latest_action = null;
@@ -309,7 +475,7 @@ class HGEZLPFCR_Admin_Order {
                         }
                     }
                 }
-                
+
                 // Dacă ultima acțiune este orice tip de ștergere sau marcaj "NU RESTAURA", nu restaura AWB-ul
                 if ($latest_action && (
                     strpos($latest_action, 'AWB Șters') !== false ||
@@ -318,34 +484,34 @@ class HGEZLPFCR_Admin_Order {
                 )) {
                     $should_restore = false;
                     HGEZLPFCR_Logger::log('AWB restore blocked due to deletion marker', [
-                        'order_id' => $post->ID,
+                        'order_id' => $order_id,
                         'latest_action' => $latest_action
                     ]);
                 }
             }
-            
+
             if ($should_restore) {
                 // Schedule async AWB restoration instead of blocking UI
                 if (function_exists('as_enqueue_async_action')) {
-                    as_enqueue_async_action('hgezlpfcr_restore_awb_async', [$order->get_id()], 'woo-fancourier');
-                    HGEZLPFCR_Logger::log('AWB restoration scheduled asynchronously', ['order_id' => $order->get_id()]);
+                    as_enqueue_async_action('hgezlpfcr_restore_awb_async', [$order_id], 'woo-fancourier');
+                    HGEZLPFCR_Logger::log('AWB restoration scheduled asynchronously', ['order_id' => $order_id]);
                 } else {
                     // Fallback: only restore if we have cached result (no API calls)
                     $awb = self::restore_awb_from_history_cached($order);
                 }
             }
         }
-        
+
         // Dacă AWB-ul a fost șters din FanCourier, nu îl afișa și permite regenerarea
         if ($awb_was_deleted) {
             $awb = null;
             $status = null;
         }
-        
+
         $allowed_statuses = ['processing', 'comanda-noua', 'completed', 'plata-confirmata', 'emite-factura-avans'];
         $can_generate = in_array($order_status, $allowed_statuses);
-        
-        echo '<div class="hgezlpfcr-awb-actions" data-order-id="' . esc_attr($post->ID) . '">';
+
+        echo '<div class="hgezlpfcr-awb-actions" data-order-id="' . esc_attr($order_id) . '">';
 
         if ($awb) {
             echo '<p><strong>AWB:</strong> <code>' . esc_html($awb) . '</code></p>';
@@ -358,30 +524,30 @@ class HGEZLPFCR_Admin_Order {
             // Download PDF link (GET with nonce)
             $download_url = admin_url('admin-post.php?' . http_build_query([
                 'action' => 'hgezlpfcr_download_awb',
-                'post_id' => $post->ID,
+                'post_id' => $order_id,
                 'hgezlpfcr_awb_nonce' => wp_create_nonce('hgezlpfcr_awb_actions')
             ]));
             echo '<a href="' . esc_url($download_url) . '" class="button">📄 Descarcă PDF</a> ';
 
             // Sync status button (AJAX)
             $nonce = wp_create_nonce('hgezlpfcr_awb_ajax');
-            echo '<button type="button" class="button fc-sync-awb-btn" data-order-id="' . esc_attr($post->ID) . '" data-nonce="' . esc_attr($nonce) . '">🔄 Verifică AWB</button>';
+            echo '<button type="button" class="button fc-sync-awb-btn" data-order-id="' . esc_attr($order_id) . '" data-nonce="' . esc_attr($nonce) . '">🔄 Verifică AWB</button>';
 
             echo '</div>';
 
             // Status area for AJAX responses
             echo '<div class="hgezlpfcr-awb-status" style="margin-top: 10px; display: none;"></div>';
-            
+
         } elseif ($can_generate) {
             echo '<p><strong>Status comandă:</strong> ' . esc_html($order_status) . '</p>';
             echo '<p><em>AWB nu a fost generat încă.</em></p>';
-            
-                                        // Generate AWB button (AJAX)
-               echo '<div class="hgezlpfcr-awb-actions" style="margin: 10px 0;">';
-               echo '<button type="button" class="button button-primary hgezlpfcr-generate-awb-btn" data-order-id="' . esc_attr($post->ID) . '">🚚 Generează AWB</button>';
-               echo '<div class="hgezlpfcr-awb-status" style="margin-top: 10px; display: none;"></div>';
-               echo '</div>';
-            
+
+            // Generate AWB button (AJAX)
+            echo '<div class="hgezlpfcr-awb-actions" style="margin: 10px 0;">';
+            echo '<button type="button" class="button button-primary hgezlpfcr-generate-awb-btn" data-order-id="' . esc_attr($order_id) . '">🚚 Generează AWB</button>';
+            echo '<div class="hgezlpfcr-awb-status" style="margin-top: 10px; display: none;"></div>';
+            echo '</div>';
+
         } else {
             echo '<p><strong>Status comandă:</strong> ' . esc_html($order_status) . '</p>';
             echo '<div class="notice notice-warning inline"><p>';
@@ -389,12 +555,19 @@ class HGEZLPFCR_Admin_Order {
             echo 'Status-uri permise: Comandă nouă, Completed, Plată confirmată, Emite factură Avans';
             echo '</p></div>';
         }
-        
+
         echo '</div>';
     }
 
-    public static function render_awb_history_box($post) {
-        $order = wc_get_order($post->ID);
+    /**
+     * Render AWB history meta box
+     *
+     * @param WP_Post|WC_Order $post_or_order Post object (legacy) or Order object (HPOS)
+     * @since 1.0.7 - Updated for HPOS compatibility
+     */
+    public static function render_awb_history_box($post_or_order) {
+        // HPOS compatibility: handle both WP_Post and WC_Order objects
+        $order = self::get_order_from_post_or_order($post_or_order);
         if (!$order) return;
 
         // Use helper function to check both new and legacy meta keys
@@ -2520,15 +2693,50 @@ class HGEZLPFCR_Admin_Order {
         return ob_get_clean();
     }
     
-    /** Enqueue admin scripts */
+    /**
+     * Enqueue admin scripts for order pages
+     * Supports both HPOS and legacy order edit screens
+     *
+     * @param string $hook The current admin page hook
+     * @since 1.0.7 - Updated for HPOS compatibility
+     */
     public static function enqueue_admin_scripts($hook) {
         global $post_type;
-        
-        // Only on order edit pages
-        if (!in_array($hook, ['post.php', 'post-new.php']) || !in_array($post_type, ['shop_order'])) {
+
+        // Check if we're on an order edit page (HPOS or legacy)
+        $is_order_page = false;
+
+        // Legacy: post.php with shop_order post type
+        if (in_array($hook, ['post.php', 'post-new.php']) && $post_type === 'shop_order') {
+            $is_order_page = true;
+        }
+
+        // HPOS: woocommerce_page_wc-orders with action=edit
+        if ($hook === 'woocommerce_page_wc-orders') {
+            $is_order_page = true;
+        }
+
+        // Also check for HPOS via wc_get_page_screen_id
+        if (function_exists('wc_get_page_screen_id')) {
+            $hpos_screen = wc_get_page_screen_id('shop-order');
+            if ($hook === $hpos_screen) {
+                $is_order_page = true;
+            }
+        }
+
+        // Debug logging
+        if (class_exists('HGEZLPFCR_Logger')) {
+            HGEZLPFCR_Logger::log('enqueue_admin_scripts called', [
+                'hook' => $hook,
+                'post_type' => $post_type ?? 'null',
+                'is_order_page' => $is_order_page ? 'yes' : 'no',
+            ]);
+        }
+
+        if (!$is_order_page) {
             return;
         }
-        
+
         wp_enqueue_script(
             'fc-admin-awb',
             plugin_dir_url(HGEZLPFCR_PLUGIN_FILE) . 'assets/js/fc-admin-awb.js',
@@ -2536,7 +2744,7 @@ class HGEZLPFCR_Admin_Order {
             HGEZLPFCR_PLUGIN_VER,
             true
         );
-        
+
         wp_localize_script('fc-admin-awb', 'hgezlpfcr_awb_ajax', [
             'ajax_url' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('hgezlpfcr_awb_ajax'),
@@ -2551,6 +2759,13 @@ class HGEZLPFCR_Admin_Order {
                 background-color: #ffebee !important;
             }
         ');
+
+        // Log successful script enqueue
+        if (class_exists('HGEZLPFCR_Logger')) {
+            HGEZLPFCR_Logger::log('AWB admin scripts enqueued successfully', [
+                'hook' => $hook,
+            ]);
+        }
     }
     
     

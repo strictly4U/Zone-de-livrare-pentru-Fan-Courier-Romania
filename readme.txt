@@ -5,7 +5,7 @@ Tags: shipping zones, romania, fan courier, woocommerce, awb
 Requires at least: 5.0
 Tested up to: 6.9
 Requires PHP: 8.1
-Stable tag: 1.0.6
+Stable tag: 1.0.7
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -208,6 +208,17 @@ Currently, only Standard home/office delivery is supported. All other FAN Courie
 6. AWB history and tracking status in order details
 
 == Changelog ==
+= 1.0.7 - 2026-02-06 =
+* Fixed: Meta boxes not displaying on HPOS order edit pages
+* Fixed: JavaScript not loading on HPOS order screens (Generate AWB, Verify AWB, Download PDF buttons)
+* Added: HPOS-compatible helper methods `get_order_from_post_or_order()` and `get_order_id_from_post_or_order()`
+* Added: Robust screen detection for both legacy (`shop_order`) and HPOS (`woocommerce_page_wc-orders`) screens
+* Improved: `enqueue_admin_scripts()` now correctly loads scripts on HPOS order edit pages
+* Improved: All meta box render callbacks now handle both `WP_Post` (legacy) and `WC_Order` (HPOS) objects
+* Improved: Meta box registration uses multiple hooks for maximum compatibility
+* Improved: Added debug logging for meta box registration and script enqueuing
+* Compatibility: Full HPOS support for all order page functionality (AWB generation, verification, PDF download)
+
 = 1.0.6 - 2026-01-27 =
 * Added: Formal HPOS (High-Performance Order Storage) compatibility declaration
 * Fixed: AWB history not saving correctly when HPOS is enabled
@@ -271,6 +282,9 @@ Currently, only Standard home/office delivery is supported. All other FAN Courie
 * Comprehensive logging system
 
 == Upgrade Notice ==
+
+= 1.0.7 =
+Critical HPOS fix for order edit page. Meta boxes and AWB action buttons (Generate, Verify, Download PDF) now work correctly on WooCommerce HPOS order screens. Required update for stores using HPOS.
 
 = 1.0.6 =
 Critical HPOS compatibility fix. If you're using WooCommerce with HPOS enabled, this update ensures AWB history saves correctly. Required for HgE PRO plugin v2.0.8+.
