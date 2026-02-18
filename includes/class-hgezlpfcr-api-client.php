@@ -42,7 +42,7 @@ class HGEZLPFCR_API_Client {
                 'Authorization' => 'Bearer ' . $token,
                 'User-Agent'   => 'WooFanCourier/'.HGEZLPFCR_PLUGIN_VER.'; '. home_url(),
             ], $headers),
-            'sslverify' => false, // eCommerce API uses different SSL
+            'sslverify' => true,
             'redirection' => 1,
             'body'      => http_build_query($body),
         ];
@@ -455,7 +455,7 @@ class HGEZLPFCR_API_Client {
                 'User-Agent' => 'WooFanCourier/'.HGEZLPFCR_PLUGIN_VER.'; '. home_url(),
             ],
             'body' => http_build_query(['domain' => $domain]),
-            'sslverify' => false
+            'sslverify' => true
         ];
 
         $response = wp_remote_post($url, $args);
