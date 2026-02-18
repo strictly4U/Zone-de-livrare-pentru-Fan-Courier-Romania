@@ -208,6 +208,10 @@ Currently, only Standard home/office delivery is supported. All other FAN Courie
 6. AWB history and tracking status in order details
 
 == Changelog ==
+= 1.0.8 - 2026-02-19 =
+* Security: Enabled SSL certificate verification on all eCommerce API calls (`post_form()` and `generate_auth_token()`)
+* Previously `sslverify` was set to `false` for `ecommerce.fancourier.ro` endpoints; now consistently `true` across all API methods
+
 = 1.0.7 - 2026-02-06 =
 * Fixed: Meta boxes not displaying on HPOS order edit pages
 * Fixed: JavaScript not loading on HPOS order screens (Generate AWB, Verify AWB, Download PDF buttons)
