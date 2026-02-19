@@ -639,8 +639,11 @@ class HGEZLPFCR_API_Client {
     }
     
     /**
-     * Check if AWB exists in FanCourier Borderou for specific date
-     * Returns true if AWB exists in borderou, false if not found, WP_Error on API errors
+     * Check if AWB exists in FanCourier Borderou for specific date.
+     * Returns true if AWB exists, false if not found, WP_Error on API errors.
+     *
+     * Optimized: caches borderou response per date (5 min transient) so
+     * multiple check_awb_exists calls for the same date cost only 1 API request.
      */
     public function check_awb_exists(string $awb, string $generation_date = null) {
         $client_id = HGEZLPFCR_Settings::get('hgezlpfcr_client', '');
@@ -648,144 +651,151 @@ class HGEZLPFCR_API_Client {
             HGEZLPFCR_Logger::error('Client ID not configured for AWB existence check', ['awb' => $awb]);
             return new WP_Error('fc_config_error', 'Client ID is not configured');
         }
-        
-        // Use current date adjusted for FanCourier timezone if generation date is not provided
+
+        // Use current date adjusted for FanCourier timezone if not provided
         if (empty($generation_date)) {
-            $generation_date = gmdate('Y-m-d', time() + (3 * 3600)); // Add 3 hours for FanCourier server timezone
+            $generation_date = gmdate('Y-m-d', time() + (3 * 3600));
         }
 
-        // Try different date formats - FanCourier might use different formats
-        $date_formats = [
-            $generation_date,                                    // Y-m-d format
-            gmdate('d.m.Y', strtotime($generation_date)),         // d.m.Y format
-            gmdate('Y/m/d', strtotime($generation_date)),         // Y/m/d format
-            gmdate('d/m/Y', strtotime($generation_date)),         // d/m/Y format
-        ];
-        
-        foreach ($date_formats as $date_format) {
-            HGEZLPFCR_Logger::log('Trying AWB borderou check with date format', [
-                'awb' => $awb,
-                'original_date' => $generation_date,
-                'trying_format' => $date_format
-            ]);
-            
-            // Use borderou endpoint to get all AWBs for the specific date
-            $endpoint = 'https://api.fancourier.ro/reports/awb?' . http_build_query([
-                'clientId' => $client_id,
-                'date' => $date_format
-            ]);
-            
-            HGEZLPFCR_Logger::log('AWB borderou check request', [
-                'awb' => $awb,
-                'date_format' => $date_format,
-                'client_id' => $client_id,
-                'endpoint' => $endpoint
-            ]);
-            
-            $response = $this->get_old_api($endpoint);
-            
-            HGEZLPFCR_Logger::log('AWB borderou check raw response', [
-                'awb' => $awb,
-                'date_format' => $date_format,
-                'response_type' => gettype($response),
-                'is_wp_error' => is_wp_error($response),
-                'data_count' => is_array($response) && isset($response['data']) ? count($response['data']) : 'N/A',
-                'full_response' => $response // DEBUG: Include full response structure
-            ]);
-            
-            // Handle API errors
-            if (is_wp_error($response)) {
-                $error_code = $response->get_error_code();
-                $error_message = $response->get_error_message();
-                
-                HGEZLPFCR_Logger::log('AWB borderou check API error', [
-                    'awb' => $awb,
-                    'date_format' => $date_format,
-                    'error_code' => $error_code,
-                    'error_message' => $error_message
-                ]);
-                
-                // If 404 or "no data" errors, try next format
-                if ($error_code === 'fc_http_404' || 
-                    strpos(strtolower($error_message), 'no data') !== false ||
-                    strpos(strtolower($error_message), 'no data') !== false ||
-                    strpos(strtolower($error_message), 'without data') !== false) {
-                    continue; // Try next date format
-                }
-                
-                // Other API errors should be returned as errors
-                return $response;
-            }
-            
-            // Check if response contains valid data
-            if (empty($response['data']) || !is_array($response['data'])) {
-                HGEZLPFCR_Logger::log('AWB borderou check: empty or invalid response data, trying next format', [
-                    'awb' => $awb,
-                    'date_format' => $date_format,
-                    'response' => $response
-                ]);
-                continue; // Try next date format
-            }
-            
-            // Search for the specific AWB in the borderou list
-            $awb_found = false;
-            foreach ($response['data'] as $borderou_entry) {
-                $borderou_awb = null;
-                
-                // Log each entry for debugging
-                HGEZLPFCR_Logger::log('Checking borderou entry', [
-                    'awb_searching' => $awb,
-                    'entry_data' => $borderou_entry
-                ]);
-                
-                // Different possible field names for AWB number
-                if (isset($borderou_entry['info']['awbNumber'])) {
-                    $borderou_awb = (string) $borderou_entry['info']['awbNumber']; // Convert to string for comparison
-                } elseif (isset($borderou_entry['awb'])) {
-                    $borderou_awb = $borderou_entry['awb'];
-                } elseif (isset($borderou_entry['awbNumber'])) {
-                    $borderou_awb = $borderou_entry['awbNumber'];
-                } elseif (isset($borderou_entry['awb_number'])) {
-                    $borderou_awb = $borderou_entry['awb_number'];
-                } elseif (isset($borderou_entry['AWB'])) {
-                    $borderou_awb = $borderou_entry['AWB'];
-                } elseif (isset($borderou_entry['number'])) {
-                    $borderou_awb = $borderou_entry['number'];
-                } elseif (isset($borderou_entry['trackingNumber'])) {
-                    $borderou_awb = $borderou_entry['trackingNumber'];
-                }
-                
-                if ($borderou_awb && strtoupper($borderou_awb) === strtoupper($awb)) {
-                    $awb_found = true;
-                    HGEZLPFCR_Logger::log('AWB found in borderou!', [
-                        'awb_searching' => $awb,
-                        'found_field' => key(array_filter($borderou_entry, function($v) use ($borderou_awb) { return $v === $borderou_awb; })),
-                        'found_value' => $borderou_awb
-                    ]);
-                    break;
-                }
-            }
-            
-            HGEZLPFCR_Logger::log('AWB borderou check result', [
-                'awb' => $awb,
-                'date_format' => $date_format,
-                'awb_found' => $awb_found,
-                'total_awbs_in_borderou' => count($response['data'])
-            ]);
-            
-            // If we found data but AWB is not in it, return false
-            // If we found the AWB, return true
-            return $awb_found;
+        // Normalize date to Y-m-d (the only format FanCourier API accepts)
+        $normalized_date = gmdate('Y-m-d', strtotime($generation_date));
+        if (!$normalized_date) {
+            $normalized_date = $generation_date;
         }
-        
-        // All date formats failed - AWB doesn't exist
-        HGEZLPFCR_Logger::log('AWB borderou check: all date formats failed', [
+
+        // Try to get the AWB set from transient cache first
+        $awb_set = $this->get_borderou_awb_set($client_id, $normalized_date);
+
+        // Cache miss or error — fetch from API
+        if ($awb_set === null) {
+            $awb_set = $this->fetch_and_cache_borderou($client_id, $normalized_date);
+        }
+
+        // API error propagation
+        if (is_wp_error($awb_set)) {
+            return $awb_set;
+        }
+
+        // Empty borderou (no AWBs for this date)
+        if (empty($awb_set)) {
+            HGEZLPFCR_Logger::log('AWB borderou check: no AWBs found for date', [
+                'awb' => $awb,
+                'date' => $normalized_date
+            ]);
+            return false;
+        }
+
+        // O(1) lookup in the pre-built set
+        $found = isset($awb_set[strtoupper($awb)]);
+
+        HGEZLPFCR_Logger::log('AWB borderou check result', [
             'awb' => $awb,
-            'original_date' => $generation_date,
-            'tried_formats' => $date_formats
+            'date' => $normalized_date,
+            'found' => $found,
+            'total_awbs_in_borderou' => count($awb_set)
         ]);
-        
-        return false;
+
+        return $found;
+    }
+
+    /**
+     * Get cached AWB set for a given client + date.
+     * Returns associative array (AWB => true) or null on cache miss.
+     */
+    private function get_borderou_awb_set(string $client_id, string $date) {
+        $cache_key = 'hgezlpfcr_borderou_' . md5($client_id . '_' . $date);
+        $cached = get_transient($cache_key);
+        if ($cached !== false) {
+            HGEZLPFCR_Logger::log('AWB borderou cache hit', ['date' => $date, 'count' => count($cached)]);
+            return $cached;
+        }
+        return null;
+    }
+
+    /**
+     * Fetch borderou from API, build an AWB lookup set, and cache it.
+     * Returns associative array (AWB => true), empty array, or WP_Error.
+     */
+    private function fetch_and_cache_borderou(string $client_id, string $date) {
+        $endpoint = 'https://api.fancourier.ro/reports/awb?' . http_build_query([
+            'clientId' => $client_id,
+            'date' => $date
+        ]);
+
+        HGEZLPFCR_Logger::log('AWB borderou API request', [
+            'date' => $date,
+            'endpoint' => $endpoint
+        ]);
+
+        $response = $this->get_old_api($endpoint);
+
+        // Handle API errors
+        if (is_wp_error($response)) {
+            $error_code = $response->get_error_code();
+            $error_message = $response->get_error_message();
+
+            // 404 / "no data" means no AWBs for this date — cache empty set
+            if ($error_code === 'fc_http_404' ||
+                strpos(strtolower($error_message), 'no data') !== false ||
+                strpos(strtolower($error_message), 'without data') !== false) {
+                $this->cache_borderou_set($client_id, $date, []);
+                return [];
+            }
+
+            HGEZLPFCR_Logger::warning('AWB borderou API error', [
+                'date' => $date,
+                'error_code' => $error_code,
+                'error_message' => $error_message
+            ]);
+            return $response;
+        }
+
+        // Empty or invalid response
+        if (empty($response['data']) || !is_array($response['data'])) {
+            HGEZLPFCR_Logger::log('AWB borderou: empty response data', ['date' => $date]);
+            $this->cache_borderou_set($client_id, $date, []);
+            return [];
+        }
+
+        // Build lookup set: uppercase AWB => true
+        $awb_set = [];
+        foreach ($response['data'] as $entry) {
+            $entry_awb = $this->extract_awb_from_entry($entry);
+            if ($entry_awb) {
+                $awb_set[strtoupper($entry_awb)] = true;
+            }
+        }
+
+        HGEZLPFCR_Logger::log('AWB borderou fetched and cached', [
+            'date' => $date,
+            'total_awbs' => count($awb_set)
+        ]);
+
+        $this->cache_borderou_set($client_id, $date, $awb_set);
+        return $awb_set;
+    }
+
+    /**
+     * Extract AWB number from a borderou entry, checking all known field names.
+     */
+    private function extract_awb_from_entry(array $entry): ?string {
+        if (isset($entry['info']['awbNumber'])) {
+            return (string) $entry['info']['awbNumber'];
+        }
+        foreach (['awb', 'awbNumber', 'awb_number', 'AWB', 'number', 'trackingNumber'] as $field) {
+            if (isset($entry[$field]) && $entry[$field] !== '') {
+                return (string) $entry[$field];
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Store borderou AWB set in transient cache.
+     */
+    private function cache_borderou_set(string $client_id, string $date, array $awb_set): void {
+        $cache_key = 'hgezlpfcr_borderou_' . md5($client_id . '_' . $date);
+        set_transient($cache_key, $awb_set, 5 * MINUTE_IN_SECONDS);
     }
     
     public function get_tariff(array $params) {

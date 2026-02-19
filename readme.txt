@@ -211,6 +211,9 @@ Currently, only Standard home/office delivery is supported. All other FAN Courie
 = 1.0.8 - 2026-02-19 =
 * Security: Enabled SSL certificate verification on all eCommerce API calls (`post_form()` and `generate_auth_token()`)
 * Previously `sslverify` was set to `false` for `ecommerce.fancourier.ro` endpoints; now consistently `true` across all API methods
+* Performance: Optimized `check_awb_exists()` — borderou responses are now cached per date (5 min transient), reducing API calls from up to 4 per check to at most 1
+* Performance: Multiple AWB existence checks for the same date now use a single cached API call with O(1) lookup instead of iterating all entries
+* Performance: Removed excessive per-entry debug logging from borderou checks
 
 = 1.0.7 - 2026-02-06 =
 * Fixed: Meta boxes not displaying on HPOS order edit pages
