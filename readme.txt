@@ -5,7 +5,7 @@ Tags: shipping zones, romania, fan courier, woocommerce, awb
 Requires at least: 5.0
 Tested up to: 6.9
 Requires PHP: 8.1
-Stable tag: 1.0.8
+Stable tag: 1.0.9
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -208,6 +208,13 @@ Currently, only Standard home/office delivery is supported. All other FAN Courie
 6. AWB history and tracking status in order details
 
 == Changelog ==
+= 1.0.9 - 2026-02-21 =
+* Security: Added file integrity monitoring system (SHA-256 hash verification)
+* New: Hourly WP-Cron check detects modified, deleted, or suspicious files in plugin directory
+* New: Admin email alerts and persistent dashboard warning on integrity check failure
+* New: Automatic hash regeneration on plugin updates (WordPress upgrader, FTP, or version change)
+* New: Detection of unexpected PHP files that may indicate compromise
+
 = 1.0.8 - 2026-02-19 =
 * Security: Enabled SSL certificate verification on all eCommerce API calls (`post_form()` and `generate_auth_token()`)
 * Previously `sslverify` was set to `false` for `ecommerce.fancourier.ro` endpoints; now consistently `true` across all API methods
@@ -289,6 +296,9 @@ Currently, only Standard home/office delivery is supported. All other FAN Courie
 * Comprehensive logging system
 
 == Upgrade Notice ==
+
+= 1.0.9 =
+Security enhancement: file integrity monitoring with SHA-256 hashes. Detects unauthorized file modifications, unexpected PHP files, and sends email alerts. Recommended for all installations.
 
 = 1.0.7 =
 Critical HPOS fix for order edit page. Meta boxes and AWB action buttons (Generate, Verify, Download PDF) now work correctly on WooCommerce HPOS order screens. Required update for stores using HPOS.

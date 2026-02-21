@@ -3,7 +3,7 @@
  * Plugin Name: HgE: Shipping Zones for FAN Courier Romania
  * Plugin URI: https://github.com/strictly4U/Zone-de-livrare-pentru-Fan-Courier-Romania.git
  * Description: WooCommerce shipping zones integration for FAN Courier Romania (Standard service). Manual AWB generation, PDF label display for orders, and AWB generation history.
- * Version: 1.0.8
+ * Version: 1.0.9
  * Requires at least: 5.0
  * Requires PHP: 8.1
  * Requires Plugins: woocommerce
@@ -35,7 +35,7 @@ add_action('before_woocommerce_init', function() {
 });
 
 define('HGEZLPFCR_PLUGIN_FILE', __FILE__);
-define('HGEZLPFCR_PLUGIN_VER', '1.0.7');
+define('HGEZLPFCR_PLUGIN_VER', '1.0.9');
 define('HGEZLPFCR_OPTION_GROUP', 'hgezlpfcr_settings');
 
 // HGEZLPFCR_LOG_ENABLED will be defined dynamically based on 'hgezlpfcr_debug' setting
@@ -61,6 +61,18 @@ define('HGEZLPFCR_MIN_DECLARED_VALUE', 1);            // Minimum declared value
 // Set activation flag on plugin activation - MUST be before any other hooks
 register_activation_hook(HGEZLPFCR_PLUGIN_FILE, function () {
     add_option('hgezlpfcr_activation_redirect', true);
+
+    // Generate file integrity hashes and schedule cron.
+    require_once plugin_dir_path( HGEZLPFCR_PLUGIN_FILE ) . 'includes/class-hgezlpfcr-logger.php';
+    require_once plugin_dir_path( HGEZLPFCR_PLUGIN_FILE ) . 'includes/class-hgezlpfcr-integrity.php';
+    HGEZLPFCR_Integrity::on_activation();
+});
+
+// Clean up integrity cron on deactivation.
+register_deactivation_hook(HGEZLPFCR_PLUGIN_FILE, function () {
+    require_once plugin_dir_path( HGEZLPFCR_PLUGIN_FILE ) . 'includes/class-hgezlpfcr-logger.php';
+    require_once plugin_dir_path( HGEZLPFCR_PLUGIN_FILE ) . 'includes/class-hgezlpfcr-integrity.php';
+    HGEZLPFCR_Integrity::on_deactivation();
 });
 
 // Add Settings link in plugins list
@@ -214,10 +226,12 @@ add_action('plugins_loaded', function () {
     require_once plugin_dir_path(__FILE__) . 'includes/class-hgezlpfcr-api-client.php';
     require_once plugin_dir_path(__FILE__) . 'includes/class-hgezlpfcr-admin-order.php';
     require_once plugin_dir_path(__FILE__) . 'includes/class-hgezlpfcr-healthcheck.php';
+    require_once plugin_dir_path(__FILE__) . 'includes/class-hgezlpfcr-integrity.php';
 
     HGEZLPFCR_Settings::init();
     HGEZLPFCR_Admin_Order::init();
     HGEZLPFCR_Healthcheck::init();
+    HGEZLPFCR_Integrity::instance();
 
     // Register shipping methods
     add_filter('woocommerce_shipping_methods', function ($methods) {
