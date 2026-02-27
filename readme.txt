@@ -213,6 +213,8 @@ Currently, only Standard home/office delivery is supported. All other FAN Courie
 * New: 2-hour grace period — AWBs generated within the last 2 hours are protected from Borderou-based deletion
 * Fixed: Metabox auto-cleanup no longer deletes a newly regenerated AWB based on a stale "AWB Șters" history entry from the previous AWB
 * Improved: Sync verification now shows informative "grace period" message instead of deleting recent AWBs
+* Fixed: force_delete_awb_from_order() now uses the actual AWB generation date when checking the borderou, preventing false deletions of AWBs generated on previous days
+* Fixed: Async AWB restoration no longer triggers for orders that have no "AWB Generat" entry in history, eliminating unnecessary log spam and Action Scheduler tasks
 
 = 1.0.9 - 2026-02-21 =
 * Security: Added file integrity monitoring system (SHA-256 hash verification)

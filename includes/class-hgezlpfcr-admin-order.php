@@ -466,33 +466,38 @@ class HGEZLPFCR_Admin_Order {
 
         // Check if AWB exists in history but not in meta data (doar dacă nu a fost șters)
         if (!$awb && !$awb_was_deleted) {
-            $should_restore = true;
+            $should_restore = false; // Default: don't restore unless history proves there's an AWB
 
             if (is_array($history) && !empty($history)) {
-                // Caută ultima acțiune din istoric - verifică și ștergerea forțată
+                // Caută ultima acțiune relevantă din istoric
                 $latest_action = null;
+                $has_awb_generat = false;
                 foreach (array_reverse($history) as $entry) {
-                    if (isset($entry['action'])) {
-                        // Verifică pentru orice tip de ștergere sau marcaj de ne-restaurare
-                        if (in_array($entry['action'], ['AWB Generat', 'AWB Șters', 'AWB Șters (Forțat)']) ||
-                            strpos($entry['action'], 'NU RESTAURA') !== false ||
-                            strpos($entry['action'], 'Șters Forțat') !== false) {
-                            $latest_action = $entry['action'];
-                            break;
-                        }
+                    if (!isset($entry['action'])) continue;
+                    // Verifică dacă există vreun AWB generat în istoric
+                    if ($entry['action'] === 'AWB Generat') {
+                        $has_awb_generat = true;
+                    }
+                    if (in_array($entry['action'], ['AWB Generat', 'AWB Șters', 'AWB Șters (Forțat)']) ||
+                        strpos($entry['action'], 'NU RESTAURA') !== false ||
+                        strpos($entry['action'], 'Șters Forțat') !== false) {
+                        $latest_action = $entry['action'];
+                        break;
                     }
                 }
 
-                // Dacă ultima acțiune este orice tip de ștergere sau marcaj "NU RESTAURA", nu restaura AWB-ul
-                if ($latest_action && (
-                    strpos($latest_action, 'AWB Șters') !== false ||
-                    strpos($latest_action, 'NU RESTAURA') !== false ||
-                    strpos($latest_action, 'Șters Forțat') !== false
-                )) {
-                    $should_restore = false;
-                    HGEZLPFCR_Logger::log('AWB restore blocked due to deletion marker', [
+                // Restaurăm NUMAI dacă:
+                // 1. Istoria conține cel puțin un "AWB Generat"
+                // 2. Ultima acțiune relevantă NU este o ștergere sau marker "NU RESTAURA"
+                if ($has_awb_generat && $latest_action === 'AWB Generat') {
+                    $should_restore = true;
+                }
+
+                if (!$should_restore && $latest_action) {
+                    HGEZLPFCR_Logger::log('AWB restore blocked', [
                         'order_id' => $order_id,
-                        'latest_action' => $latest_action
+                        'latest_action' => $latest_action,
+                        'has_awb_generat' => $has_awb_generat
                     ]);
                 }
             }
@@ -708,15 +713,24 @@ class HGEZLPFCR_Admin_Order {
         }
         
         // Check if AWB exists in history but not in meta data (only if not deleted)
-        if (!$awb && !$awb_was_deleted) {
-            // Schedule async AWB restoration instead of blocking UI
-            if (function_exists('as_enqueue_async_action')) {
-                as_enqueue_async_action('hgezlpfcr_restore_awb_async', [$order->get_id()], 'woo-fancourier');
-            } else {
-                $awb = self::restore_awb_from_history_cached($order); // Only cached, no API calls
+        // Only attempt restoration if history actually contains an "AWB Generat" entry
+        if (!$awb && !$awb_was_deleted && is_array($history) && !empty($history)) {
+            $has_awb_generat = false;
+            foreach ($history as $entry) {
+                if (isset($entry['action']) && $entry['action'] === 'AWB Generat') {
+                    $has_awb_generat = true;
+                    break;
+                }
+            }
+            if ($has_awb_generat) {
+                if (function_exists('as_enqueue_async_action')) {
+                    as_enqueue_async_action('hgezlpfcr_restore_awb_async', [$order->get_id()], 'woo-fancourier');
+                } else {
+                    $awb = self::restore_awb_from_history_cached($order);
+                }
             }
         }
-        
+
         // Dacă AWB-ul a fost șters din FanCourier, nu îl afișa
         if ($awb_was_deleted) {
             $awb = null;
@@ -795,15 +809,24 @@ class HGEZLPFCR_Admin_Order {
         }
         
         // Check if AWB exists in history but not in meta data (only if not deleted)
-        if (!$awb && !$awb_was_deleted) {
-            // Schedule async AWB restoration instead of blocking UI
-            if (function_exists('as_enqueue_async_action')) {
-                as_enqueue_async_action('hgezlpfcr_restore_awb_async', [$order->get_id()], 'woo-fancourier');
-            } else {
-                $awb = self::restore_awb_from_history_cached($order); // Only cached, no API calls
+        // Only attempt restoration if history actually contains an "AWB Generat" entry
+        if (!$awb && !$awb_was_deleted && is_array($history) && !empty($history)) {
+            $has_awb_generat = false;
+            foreach ($history as $entry) {
+                if (isset($entry['action']) && $entry['action'] === 'AWB Generat') {
+                    $has_awb_generat = true;
+                    break;
+                }
+            }
+            if ($has_awb_generat) {
+                if (function_exists('as_enqueue_async_action')) {
+                    as_enqueue_async_action('hgezlpfcr_restore_awb_async', [$order->get_id()], 'woo-fancourier');
+                } else {
+                    $awb = self::restore_awb_from_history_cached($order);
+                }
             }
         }
-        
+
         // Dacă AWB-ul a fost șters din FanCourier, nu îl afișa
         if ($awb_was_deleted) {
             $awb = null;
@@ -2112,13 +2135,16 @@ class HGEZLPFCR_Admin_Order {
             }
         }
 
-        // FIRST: Check if AWB exists in FanCourier - only delete if it doesn't exist there
+        // FIRST: Check if AWB exists in FanCourier - only delete if it doesn't exist there.
+        // Use the actual generation date so we query the correct borderou.
+        $check_date = $generation_date_raw ?: null;
         $api = new HGEZLPFCR_API_Client();
-        $awb_exists = $api->check_awb_exists($awb);
-        
+        $awb_exists = $api->check_awb_exists($awb, $check_date);
+
         HGEZLPFCR_Logger::log('Conditional AWB deletion - checking FanCourier existence', [
             'order_id' => $order_id,
             'awb' => $awb,
+            'check_date' => $check_date ?: '(today)',
             'exists_in_fancourier' => $awb_exists,
             'reason' => $reason
         ]);
