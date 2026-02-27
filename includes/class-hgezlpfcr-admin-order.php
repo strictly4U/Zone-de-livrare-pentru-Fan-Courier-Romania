@@ -411,9 +411,16 @@ class HGEZLPFCR_Admin_Order {
         $awb_was_deleted = false;
 
         // Verifică dacă există o ștergere forțată recentă (în ultimele 5 minute)
+        // DAR numai dacă NU s-a generat un AWB nou după ștergere.
         if (is_array($history) && !empty($history)) {
+            $found_recent_delete = false;
             foreach (array_reverse($history) as $entry) {
-                if (isset($entry['action']) && strpos($entry['action'], 'AWB Șters') !== false) {
+                if (!isset($entry['action'])) continue;
+                // Dacă găsim mai întâi o generare recentă, înseamnă că AWB-ul a fost regenerat → nu șterge
+                if (strpos($entry['action'], 'AWB Generat') !== false) {
+                    break; // AWB regenerat după ștergere — nu e nevoie de cleanup
+                }
+                if (strpos($entry['action'], 'AWB Șters') !== false) {
                     $entry_time = isset($entry['timestamp']) ? $entry['timestamp'] : (isset($entry['date']) ? strtotime($entry['date']) : 0);
                     // Dacă ștergerea a fost în ultimele 5 minute și încă există AWB în meta, forțează ștergerea din nou
                     if ($entry_time && (time() - $entry_time) < 300 && $awb) { // 5 minute = 300 secunde
@@ -1941,13 +1948,36 @@ class HGEZLPFCR_Admin_Order {
         
         // If AWB doesn't exist in FanCourier Borderou, delete it from order using force delete
         if ($awb_exists === false) {
+            // Grace period: skip deletion for AWBs generated < 2 hours ago
+            $gen_date_raw = self::get_awb_date($order);
+            $gen_ts       = $gen_date_raw ? strtotime($gen_date_raw) : 0;
+            $age_seconds  = $gen_ts ? (time() - $gen_ts) : PHP_INT_MAX;
+
+            if ($age_seconds < 7200) {
+                HGEZLPFCR_Logger::log('Sync Status: AWB not in borderou but within grace period — keeping', [
+                    'order_id'        => $order_id,
+                    'awb'             => $awb,
+                    'generation_date' => $generation_date,
+                    'age_seconds'     => $age_seconds
+                ]);
+                self::log_awb_action($order_id, 'Verificare AWB — perioadă de grație', 'AWB: ' . $awb . ' nu apare încă în Borderou (generat acum ' . round($age_seconds / 60) . ' min). AWB-ul este păstrat.');
+                if ($redirect) {
+                    self::admin_notice('AWB-ul a fost generat recent și nu apare încă în Borderou FanCourier. Verificați din nou mai târziu.', 'info', $order_id);
+                    if ($get_action === 'hgezlpfcr_sync_awb') {
+                        wp_safe_redirect(add_query_arg(['fc_refresh' => '1'], remove_query_arg(['action', 'post_id', 'hgezlpfcr_awb_nonce'])));
+                        exit;
+                    }
+                }
+                return;
+            }
+
             $old_awb = $awb;
             HGEZLPFCR_Logger::log('Sync Status: AWB not found in borderou, proceeding with deletion', [
                 'order_id' => $order_id,
                 'awb' => $awb,
                 'generation_date' => $generation_date
             ]);
-            
+
             $delete_success = self::force_delete_awb_from_order($order_id, 'AWB nu există în Borderou FanCourier pentru data ' . $generation_date);
             
             if ($delete_success) {
@@ -2061,7 +2091,27 @@ class HGEZLPFCR_Admin_Order {
             HGEZLPFCR_Logger::log('No AWB to delete from order', ['order_id' => $order_id]);
             return true; // No AWB exists, consider it success
         }
-        
+
+        // GRACE PERIOD: Do not delete AWBs generated within the last 2 hours.
+        // Freshly generated AWBs do not appear in the Borderou immediately;
+        // deleting them based on a Borderou miss would be a false positive.
+        $generation_date_raw = self::get_awb_date($order);
+        if ($generation_date_raw) {
+            $gen_ts = strtotime($generation_date_raw);
+            $now_ts = time();
+            // Allow a 2-hour (7200 s) window after generation before Borderou-based deletion
+            if ($gen_ts && ($now_ts - $gen_ts) < 7200) {
+                HGEZLPFCR_Logger::log('AWB deletion skipped — grace period active (generated < 2 h ago)', [
+                    'order_id'        => $order_id,
+                    'awb'             => $awb,
+                    'generation_date' => $generation_date_raw,
+                    'age_seconds'     => $now_ts - $gen_ts,
+                    'reason'          => $reason
+                ]);
+                return true; // Treat as success — AWB is too new to verify via Borderou
+            }
+        }
+
         // FIRST: Check if AWB exists in FanCourier - only delete if it doesn't exist there
         $api = new HGEZLPFCR_API_Client();
         $awb_exists = $api->check_awb_exists($awb);

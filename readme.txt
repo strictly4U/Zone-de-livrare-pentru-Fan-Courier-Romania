@@ -5,7 +5,7 @@ Tags: shipping zones, romania, fan courier, woocommerce, awb
 Requires at least: 5.0
 Tested up to: 6.9
 Requires PHP: 8.1
-Stable tag: 1.0.9
+Stable tag: 1.0.10
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -208,6 +208,12 @@ Currently, only Standard home/office delivery is supported. All other FAN Courie
 6. AWB history and tracking status in order details
 
 == Changelog ==
+= 1.0.10 - 2026-02-27 =
+* Fixed: Freshly generated AWBs were incorrectly deleted when not yet visible in the FAN Courier Borderou (race condition)
+* New: 2-hour grace period — AWBs generated within the last 2 hours are protected from Borderou-based deletion
+* Fixed: Metabox auto-cleanup no longer deletes a newly regenerated AWB based on a stale "AWB Șters" history entry from the previous AWB
+* Improved: Sync verification now shows informative "grace period" message instead of deleting recent AWBs
+
 = 1.0.9 - 2026-02-21 =
 * Security: Added file integrity monitoring system (SHA-256 hash verification)
 * New: Hourly WP-Cron check detects modified, deleted, or suspicious files in plugin directory
@@ -296,6 +302,9 @@ Currently, only Standard home/office delivery is supported. All other FAN Courie
 * Comprehensive logging system
 
 == Upgrade Notice ==
+
+= 1.0.10 =
+Bug fix: prevents freshly generated AWBs from being incorrectly deleted when not yet visible in FAN Courier Borderou. Adds 2-hour grace period and fixes metabox auto-cleanup race condition. Recommended for all installations.
 
 = 1.0.9 =
 Security enhancement: file integrity monitoring with SHA-256 hashes. Detects unauthorized file modifications, unexpected PHP files, and sends email alerts. Recommended for all installations.
