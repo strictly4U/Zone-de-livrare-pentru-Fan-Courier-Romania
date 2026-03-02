@@ -208,7 +208,8 @@ Currently, only Standard home/office delivery is supported. All other FAN Courie
 6. AWB history and tracking status in order details
 
 == Changelog ==
-= 1.0.11 - 2026-02-27 =
+= 1.0.11 - 2026-03-02 =
+* Fixed: Grace period now uses precise microtime() timestamp from AWB history instead of date-only META_AWB_DATE (which resolved to midnight and always exceeded the 2-hour window)
 * Fixed: force_delete_awb_from_order() now uses the actual AWB generation date when checking the borderou, preventing false deletions of AWBs generated on previous days
 * Fixed: Async AWB restoration no longer triggers for orders that have no "AWB Generat" entry in history, eliminating unnecessary log spam and Action Scheduler tasks
 * Fixed: Fatal error when class-hgezlpfcr-integrity.php is missing — integrity class loading is now conditional with file_exists() checks
