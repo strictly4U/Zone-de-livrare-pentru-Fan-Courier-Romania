@@ -1204,7 +1204,9 @@ class HGEZLPFCR_Admin_Order {
                 return false;
             }
             
-            HGEZLPFCR_Logger::log('Building payload for order', ['order_id' => $order_id]);
+            // NOTE: build_payload_from_order() emits its own "Building payload
+            // for order" log entry — don't duplicate it here. See bd
+            // FcRapid1923-mn4 for the original double-call report.
             $api = new HGEZLPFCR_API_Client();
             $payload = self::build_payload_from_order($order);
 

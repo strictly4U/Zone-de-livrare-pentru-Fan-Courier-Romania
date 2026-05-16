@@ -20,8 +20,12 @@ class HGEZLPFCR_Healthcheck {
         // Also try with a different hook to ensure it works
         add_action('woocommerce_admin_menu', [__CLASS__, 'menu']);
 
-        // Debug: log that healthcheck is initialized
-        HGEZLPFCR_Logger::log('FC_Healthcheck initialized');
+        // Log that healthcheck is initialized. Demoted from log() to debug()
+        // since 1.0.13 (FcRapid1923-48q): WP Heartbeat + admin-page background
+        // AJAX caused this to fire ~10×/sec on some sites, drowning the Info
+        // channel. The entry stays available when debug mode is enabled in
+        // the plugin settings.
+        HGEZLPFCR_Logger::debug('FC_Healthcheck initialized');
     }
 
     public static function menu() {

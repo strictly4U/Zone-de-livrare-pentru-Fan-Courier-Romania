@@ -5,7 +5,7 @@ Tags: shipping zones, romania, fan courier, woocommerce, awb
 Requires at least: 5.0
 Tested up to: 6.9
 Requires PHP: 8.1
-Stable tag: 1.0.12
+Stable tag: 1.0.13
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -208,6 +208,10 @@ Currently, only Standard home/office delivery is supported. All other FAN Courie
 6. AWB history and tracking status in order details
 
 == Changelog ==
+= 1.0.13 - 2026-05-16 =
+* Fixed: Eliminated duplicate "Building payload for order" log entry on every AWB generation. The caller in create_awb_for_order() emitted the message once and build_payload_from_order() emitted it again immediately after — same order_id, same second. The caller-side log is gone; the callee-side stays so callers that go through build_payload_from_order() directly still log it. AWB generation flow is unchanged (idem_key continues to protect against duplicate AWBs). (FcRapid1923-mn4)
+* Changed: Healthcheck initialization log demoted from Info to Debug level. WP Heartbeat + admin-page background AJAX caused "FC_Healthcheck initialized" to fire ~10×/sec on busy sites, drowning the Info channel. Entry stays available when debug mode is enabled in the plugin settings. (FcRapid1923-48q)
+
 = 1.0.12 - 2026-03-02 =
 * New: "Restaurează AWB" button in order metabox — when an AWB was deleted from the order but still exists in FAN Courier SelfAWB, admins can restore it with one click
 * New: AWB restoration verifies existence in FAN Courier borderou before restoring, preventing restoration of truly deleted AWBs
