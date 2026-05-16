@@ -61,6 +61,53 @@ jQuery(document).ready(function($) {
         });
     });
     
+    // Handle Restore AWB button click
+    $(document).on('click', '.hgezlpfcr-restore-awb-btn', function(e) {
+        e.preventDefault();
+        console.log('Restore AWB button clicked');
+
+        var $btn = $(this);
+        var $container = $btn.closest('.hgezlpfcr-awb-actions');
+        var $status = $container.find('.hgezlpfcr-awb-status');
+        var orderId = $btn.data('order-id');
+        var nonce = $btn.data('nonce');
+
+        // Disable both buttons
+        $container.find('button').prop('disabled', true);
+        $btn.text('Restaurare...');
+        $status.removeClass('notice-success notice-error').addClass('notice notice-info').html('<p>Se verifică AWB-ul în FanCourier și se restaurează...</p>').show();
+
+        $.ajax({
+            url: hgezlpfcr_awb_ajax.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'hgezlpfcr_restore_awb',
+                order_id: orderId,
+                nonce: nonce
+            },
+            success: function(response) {
+                console.log('Restore AJAX response:', response);
+                if (response.success) {
+                    $status.removeClass('notice-info notice-error').addClass('notice-success').html('<p>' + response.data.message + '</p>');
+                    $container.html(response.data.html);
+                    setTimeout(function() {
+                        $status.fadeOut();
+                    }, 5000);
+                } else {
+                    $status.removeClass('notice-info notice-success').addClass('notice-error').html('<p>' + (response.data || 'Eroare la restaurarea AWB') + '</p>');
+                    $container.find('button').prop('disabled', false);
+                    $btn.text('♻️ Restaurează AWB');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Restore AJAX error:', {xhr: xhr, status: status, error: error});
+                $status.removeClass('notice-info notice-success').addClass('notice-error').html('<p>Eroare la restaurarea AWB: ' + error + '</p>');
+                $container.find('button').prop('disabled', false);
+                $btn.text('♻️ Restaurează AWB');
+            }
+        });
+    });
+
     // Handle Sync AWB button click
     $(document).on('click', '.fc-sync-awb-btn', function(e) {
         e.preventDefault();

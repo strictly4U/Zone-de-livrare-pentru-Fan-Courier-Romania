@@ -5,7 +5,7 @@ Tags: shipping zones, romania, fan courier, woocommerce, awb
 Requires at least: 5.0
 Tested up to: 6.9
 Requires PHP: 8.1
-Stable tag: 1.0.11
+Stable tag: 1.0.12
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -208,6 +208,13 @@ Currently, only Standard home/office delivery is supported. All other FAN Courie
 6. AWB history and tracking status in order details
 
 == Changelog ==
+= 1.0.12 - 2026-03-02 =
+* New: "Restaurează AWB" button in order metabox — when an AWB was deleted from the order but still exists in FAN Courier SelfAWB, admins can restore it with one click
+* New: AWB restoration verifies existence in FAN Courier borderou before restoring, preventing restoration of truly deleted AWBs
+* New: "AWB Restaurat" history entry with precise timestamp for audit trail
+* Improved: Grace period now protects both generated and restored AWBs from automatic deletion (2-hour window)
+* Improved: All history scans (metabox, order list columns, AJAX handlers) recognize "AWB Restaurat" as a valid active AWB state
+
 = 1.0.11 - 2026-03-02 =
 * Fixed: Grace period now uses precise microtime() timestamp from AWB history instead of date-only META_AWB_DATE (which resolved to midnight and always exceeded the 2-hour window)
 * Fixed: force_delete_awb_from_order() now uses the actual AWB generation date when checking the borderou, preventing false deletions of AWBs generated on previous days
