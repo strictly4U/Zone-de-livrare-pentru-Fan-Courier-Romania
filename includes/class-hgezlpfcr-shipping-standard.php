@@ -92,51 +92,41 @@ class HGEZLPFCR_Shipping_Standard extends WC_Shipping_Method {
     protected function get_dynamic_cost($package) {
         try {
             $api = new HGEZLPFCR_API_Client();
-            
+
             // Build tariff request from package data
             $destination = $package['destination'] ?? [];
             if (empty($destination['city'])) {
                 HGEZLPFCR_Logger::log('Insufficient destination data for dynamic pricing', $destination);
                 return 0;
             }
-            
-            // First check if service is available for destination
-            $service_check = [
-                'service' => 'Standard',
-                'county' => $destination['state'] ?? '',
-                'locality' => $destination['city'] ?? '',
-                'weight' => $this->calculate_package_weight($package),
-                'length' => 30,
-                'width' => 20,
-                'height' => 10,
-            ];
 
-            $availability = $api->check_service($service_check);
-            if (is_wp_error($availability) || empty($availability['available'])) {
-                HGEZLPFCR_Logger::log('Service not available for destination', $destination);
-                return 0;
-            }
-            
+            // Single cached call (since 1.0.13) — replaces the previous 2-step
+            // check_service() + get_tariff() pattern. Cache HIT returns ~1ms;
+            // cache MISS runs the same 2 HTTP calls as before and caches the
+            // combined result (including "not available") for 5 minutes.
+            // Cache key: hgezlpfcr_twa_ + md5(service|county|locality|weight_bucket_0.5kg).
             $params = [
-                'service' => 'Standard',
-                'county' => $destination['state'] ?? '',
-                'locality' => $destination['city'] ?? '',
-                'weight' => $this->calculate_package_weight($package),
-                'length' => 30,
-                'width' => 20,
-                'height' => 10,
+                'service'  => 'Standard',
+                'county'   => $destination['state'] ?? '',
+                'locality' => $destination['city']  ?? '',
+                'weight'   => $this->calculate_package_weight($package),
+                'length'   => 30,
+                'width'    => 20,
+                'height'   => 10,
                 'declared_value' => WC()->cart ? WC()->cart->get_total('edit') : 0, // Use total with VAT
             ];
-            
-            $response = $api->get_tariff($params);
-            
-            if (is_wp_error($response)) {
-                HGEZLPFCR_Logger::error('API tariff calculation failed', ['error' => $response->get_error_message()]);
+
+            $cached = $api->get_tariff_with_availability_cached($params);
+
+            if (!$cached['available']) {
+                HGEZLPFCR_Logger::log('Service not available for destination', $destination + [
+                    'error' => $cached['error'],
+                ]);
                 return 0;
             }
-            
-            return isset($response['price']) ? (float) $response['price'] : 0;
-            
+
+            return (float) $cached['price'];
+
         } catch (Exception $e) {
             HGEZLPFCR_Logger::error('Dynamic pricing calculation error', ['exception' => $e->getMessage()]);
             return 0;

@@ -925,4 +925,162 @@ class HGEZLPFCR_API_Client {
             return new WP_Error('hgezlpfcr_auth_failed', 'Authentication failed');
         }
     }
+
+    /**
+     * Combined availability + tariff lookup with 5-minute transient cache.
+     *
+     * Mirror of the FC Pro pattern at class-hgezlpfcr-pro-shipping-base.php:454-489.
+     * Reduces the per-package checkout cost from 2 sync HTTP calls (~4-10s) to
+     * a single transient read (~1ms) on cache hit. On cache miss, runs the
+     * same 2 HTTP calls as the previous behaviour and caches the combined
+     * result for 5 minutes — including the "not available" outcome, which
+     * prevents API stampede for unsupported destinations.
+     *
+     * Cache key is hgezlpfcr_twa_ + md5(service|county|locality|weight_bucket).
+     * Weight is rounded to the nearest 0.5kg so e.g. 1.1kg and 1.4kg share a
+     * cache bucket (1.5kg). Identical key shape to FC Pro for future
+     * extraction into a shared helper.
+     *
+     * @param array $params Same shape as check_service() + get_tariff(): service, county, locality, weight, length, width, height, declared_value.
+     * @return array{available: bool, price: float, error: string|null}
+     * @since 1.0.13
+     */
+    public function get_tariff_with_availability_cached(array $params): array {
+        $weight_rounded = round(((float) ($params['weight'] ?? 0)) * 2) / 2;
+        $cache_key = 'hgezlpfcr_twa_' . md5(
+            ($params['service']  ?? 'Standard') . '|' .
+            ($params['county']   ?? '') . '|' .
+            ($params['locality'] ?? '') . '|' .
+            $weight_rounded
+        );
+
+        $cached = get_transient($cache_key);
+        if ($cached !== false && is_array($cached)) {
+            HGEZLPFCR_Logger::log('Tariff with availability — cache HIT', [
+                'service'   => $params['service'] ?? 'Standard',
+                'available' => $cached['available'] ?? false,
+                'price'     => $cached['price'] ?? 0,
+            ]);
+            return $cached;
+        }
+
+        // Cache miss — run the original 2-call sequence (preserves prior behaviour).
+        $availability = $this->check_service($params);
+        if (is_wp_error($availability) || empty($availability['available'])) {
+            $result = [
+                'available' => false,
+                'price'     => 0.0,
+                'error'     => is_wp_error($availability) ? $availability->get_error_message() : null,
+            ];
+        } else {
+            $tariff = $this->get_tariff($params);
+            if (is_wp_error($tariff)) {
+                $result = [
+                    'available' => false,
+                    'price'     => 0.0,
+                    'error'     => $tariff->get_error_message(),
+                ];
+            } else {
+                $result = [
+                    'available' => true,
+                    'price'     => (float) ($tariff['price'] ?? 0),
+                    'error'     => null,
+                ];
+            }
+        }
+
+        set_transient($cache_key, $result, 5 * MINUTE_IN_SECONDS);
+
+        HGEZLPFCR_Logger::log('Tariff with availability — cache MISS (fresh fetch + cached 5 min)', [
+            'service'   => $params['service'] ?? 'Standard',
+            'available' => $result['available'],
+            'price'     => $result['price'],
+            'error'     => $result['error'],
+        ]);
+
+        return $result;
+    }
+
+    /**
+     * Wipe every transient produced by get_tariff_with_availability_cached().
+     * Used by the credential-change auto-invalidation hook below and by the
+     * manual admin-post handler.
+     *
+     * @return int Number of transient rows deleted (best-effort).
+     * @since 1.0.13
+     */
+    public static function clear_tariff_cache(): int {
+        global $wpdb;
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- transient-by-prefix sweep; WP API has no parameterised LIKE-prefix delete for transients.
+        $deleted = $wpdb->query(
+            "DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_hgezlpfcr_twa_%' OR option_name LIKE '_transient_timeout_hgezlpfcr_twa_%'"
+        );
+        HGEZLPFCR_Logger::log('Tariff cache cleared', ['rows_deleted' => (int) $deleted]);
+        return (int) $deleted;
+    }
 }
+
+// -----------------------------------------------------------------------------
+// Tariff-cache invalidation hooks (since 1.0.13)
+//
+// Auto-invalidate on credential rotation: when the FC eCommerce API user or
+// password changes in Settings, the cached tariffs are blown away. Prices
+// don't actually depend on credentials (they're keyed on destination +
+// weight), but a credential change typically means a new account / sandbox
+// switch, and stale cache could mask configuration mistakes.
+//
+// Each setting is its own option (HGEZLPFCR_Settings::get reads individual
+// keys), so we hook the per-option update_option_<key> action for the two
+// credentials that auth the API client.
+// -----------------------------------------------------------------------------
+add_action('update_option_hgezlpfcr_user', static function ($old_value, $new_value) {
+    if ((string) $old_value !== (string) $new_value) {
+        HGEZLPFCR_API_Client::clear_tariff_cache();
+    }
+}, 10, 2);
+
+add_action('update_option_hgezlpfcr_pass', static function ($old_value, $new_value) {
+    if ((string) $old_value !== (string) $new_value) {
+        HGEZLPFCR_API_Client::clear_tariff_cache();
+    }
+}, 10, 2);
+
+// -----------------------------------------------------------------------------
+// Manual cache clear via admin-post (since 1.0.13)
+//
+// Nonce-protected URL handler. Admin can hit
+//   admin-post.php?action=hgezlpfcr_clear_tariff_cache&_wpnonce=<nonce>
+// to force a sweep without changing credentials. A UI button is intentionally
+// not added in this commit (minimal risk surface); future enhancement can
+// add it to the Settings page once verified safe on dev1.
+// -----------------------------------------------------------------------------
+add_action('admin_post_hgezlpfcr_clear_tariff_cache', static function () {
+    if (!current_user_can('manage_woocommerce')) {
+        wp_die(esc_html__('Permission denied.', 'hge-zone-de-livrare-pentru-fan-courier-romania'), 403);
+    }
+    check_admin_referer('hgezlpfcr_clear_tariff_cache');
+
+    $deleted = HGEZLPFCR_API_Client::clear_tariff_cache();
+
+    set_transient('hgezlpfcr_tariff_cache_cleared_notice', (int) $deleted, MINUTE_IN_SECONDS);
+    wp_safe_redirect(wp_get_referer() ?: admin_url('admin.php?page=wc-settings'));
+    exit;
+});
+
+add_action('admin_notices', static function () {
+    if (!current_user_can('manage_woocommerce')) {
+        return;
+    }
+    $deleted = get_transient('hgezlpfcr_tariff_cache_cleared_notice');
+    if ($deleted === false) {
+        return;
+    }
+    delete_transient('hgezlpfcr_tariff_cache_cleared_notice');
+    echo '<div class="notice notice-success is-dismissible"><p>'
+        . esc_html(sprintf(
+            /* translators: %d is the number of transient rows deleted */
+            __('FAN Courier tariff cache cleared (%d rows).', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
+            (int) $deleted
+        ))
+        . '</p></div>';
+});
