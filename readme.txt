@@ -3,7 +3,7 @@ Contributors: hge321
 Donate link: https://www.linkedin.com/in/hurubarugeorgesemanuel/
 Tags: shipping zones, romania, fan courier, woocommerce, awb
 Requires at least: 5.0
-Tested up to: 6.9
+Tested up to: 7.0
 Requires PHP: 8.1
 Stable tag: 1.0.13
 License: GPLv2 or later
