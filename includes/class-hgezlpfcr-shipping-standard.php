@@ -2,6 +2,66 @@
 if (!defined('ABSPATH')) exit;
 
 class HGEZLPFCR_Shipping_Standard extends WC_Shipping_Method {
+
+    /**
+     * Romanian county code -> FC API name mapping. WooCommerce stores
+     * counties as 2-letter state codes (B, CJ, IS, TM, etc.), but FAN
+     * Courier's /check-service + /get-tariff endpoints expect the full
+     * Romanian name without diacritics (Bucuresti, Cluj, Iasi, Timis).
+     *
+     * Sending the raw code returns HTTP 422 "Perechea judet-localitate
+     * introdusa este incorecta" and the shipping method gets marked
+     * unavailable in the cart — option disappears.
+     *
+     * Mirrors FC Pro's $county_map in class-hgezlpfcr-pro-shipping-base.php:244
+     * for cross-plugin consistency.
+     *
+     * @since 1.0.13 (1nq follow-up to djo)
+     */
+    protected static $county_map = [
+        'AB' => 'Alba',       'AR' => 'Arad',       'AG' => 'Arges',     'BC' => 'Bacau',
+        'BH' => 'Bihor',      'BN' => 'Bistrita-Nasaud', 'BT' => 'Botosani', 'BV' => 'Brasov',
+        'BR' => 'Braila',     'B'  => 'Bucuresti',  'BZ' => 'Buzau',     'CS' => 'Caras-Severin',
+        'CL' => 'Calarasi',   'CJ' => 'Cluj',       'CT' => 'Constanta', 'CV' => 'Covasna',
+        'DB' => 'Dambovita',  'DJ' => 'Dolj',       'GL' => 'Galati',    'GR' => 'Giurgiu',
+        'GJ' => 'Gorj',       'HR' => 'Harghita',   'HD' => 'Hunedoara', 'IL' => 'Ialomita',
+        'IS' => 'Iasi',       'IF' => 'Ilfov',      'MM' => 'Maramures', 'MH' => 'Mehedinti',
+        'MS' => 'Mures',      'NT' => 'Neamt',      'OT' => 'Olt',       'PH' => 'Prahova',
+        'SM' => 'Satu Mare',  'SJ' => 'Salaj',      'SB' => 'Sibiu',     'SV' => 'Suceava',
+        'TR' => 'Teleorman',  'TM' => 'Timis',      'TL' => 'Tulcea',    'VS' => 'Vaslui',
+        'VL' => 'Valcea',     'VN' => 'Vrancea',
+    ];
+
+    /**
+     * Convert a 2-letter WC state code to the full Romanian county name
+     * the FC API expects. Returns the input unchanged if not found in the
+     * map (defensive — handles non-RO states or future codes).
+     *
+     * @since 1.0.13
+     */
+    protected function get_county_name($county_code) {
+        $code = strtoupper(trim((string) $county_code));
+        return self::$county_map[$code] ?? $county_code;
+    }
+
+    /**
+     * Strip Romanian diacritics so the API receives ASCII (the FC API
+     * is inconsistent about diacritic handling; safer to normalize).
+     *
+     * @since 1.0.13
+     */
+    protected function remove_diacritics($str) {
+        if (function_exists('transliterator_transliterate')) {
+            $out = @transliterator_transliterate('Any-Latin; Latin-ASCII', (string) $str);
+            if (is_string($out)) {
+                return $out;
+            }
+        }
+        $search  = ['ă', 'â', 'î', 'ș', 'ț', 'Ă', 'Â', 'Î', 'Ș', 'Ț', 'ş', 'ţ', 'Ş', 'Ţ'];
+        $replace = ['a', 'a', 'i', 's', 't', 'A', 'A', 'I', 'S', 'T', 's', 't', 'S', 'T'];
+        return str_replace($search, $replace, (string) $str);
+    }
+
     public function __construct($instance_id = 0) {
         $this->id                 = 'fc_standard';
         $this->instance_id        = absint($instance_id);
@@ -100,6 +160,15 @@ class HGEZLPFCR_Shipping_Standard extends WC_Shipping_Method {
                 return 0;
             }
 
+            // WC stores county as 2-letter state code ('B', 'CJ', 'IS', ...);
+            // FC API expects the full Romanian name without diacritics
+            // ('Bucuresti', 'Cluj', 'Iasi', ...). Converting here (since
+            // 1.0.13 / 1nq) — sending the raw code returns HTTP 422 and the
+            // method gets marked unavailable. Diacritics also stripped from
+            // the locality defensively.
+            $county_name      = $this->get_county_name($destination['state'] ?? '');
+            $locality_clean   = $this->remove_diacritics($destination['city'] ?? '');
+
             // Single cached call (since 1.0.13) — replaces the previous 2-step
             // check_service() + get_tariff() pattern. Cache HIT returns ~1ms;
             // cache MISS runs the same 2 HTTP calls as before and caches the
@@ -107,8 +176,8 @@ class HGEZLPFCR_Shipping_Standard extends WC_Shipping_Method {
             // Cache key: hgezlpfcr_twa_ + md5(service|county|locality|weight_bucket_0.5kg).
             $params = [
                 'service'  => 'Standard',
-                'county'   => $destination['state'] ?? '',
-                'locality' => $destination['city']  ?? '',
+                'county'   => $county_name,
+                'locality' => $locality_clean,
                 'weight'   => $this->calculate_package_weight($package),
                 'length'   => 30,
                 'width'    => 20,
