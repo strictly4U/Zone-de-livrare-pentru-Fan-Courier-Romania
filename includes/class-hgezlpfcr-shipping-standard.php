@@ -45,6 +45,33 @@ class HGEZLPFCR_Shipping_Standard extends WC_Shipping_Method {
     }
 
     /**
+     * Normalize Bucharest sector localities. FC API rejects "Sector N"
+     * as a locality (returns HTTP 500 Server Error) when paired with
+     * county "Bucuresti" — it expects the locality to also be "Bucuresti".
+     * WooCommerce checkout stores the sector in the city/locality field
+     * (common Romanian convention), so we collapse it here for the API
+     * request only — the original sector is preserved on the order
+     * record because we only change the value sent to FC.
+     *
+     * Pattern matched: "sector 1" .. "sector 6" (case/space-insensitive).
+     *
+     * @since 1.0.13
+     *
+     * @param string $county_name Already mapped via get_county_name()
+     * @param string $locality    Raw locality from $destination['city']
+     * @return string Normalized locality
+     */
+    protected function normalize_bucharest_locality($county_name, $locality) {
+        if (strcasecmp(trim((string) $county_name), 'Bucuresti') !== 0) {
+            return $locality;
+        }
+        if (preg_match('/^\s*sector\s*[1-6]\s*$/i', (string) $locality)) {
+            return 'Bucuresti';
+        }
+        return $locality;
+    }
+
+    /**
      * Strip Romanian diacritics so the API receives ASCII (the FC API
      * is inconsistent about diacritic handling; safer to normalize).
      *
@@ -167,7 +194,8 @@ class HGEZLPFCR_Shipping_Standard extends WC_Shipping_Method {
             // method gets marked unavailable. Diacritics also stripped from
             // the locality defensively.
             $county_name      = $this->get_county_name($destination['state'] ?? '');
-            $locality_clean   = $this->remove_diacritics($destination['city'] ?? '');
+            $locality_raw     = $this->remove_diacritics($destination['city'] ?? '');
+            $locality_clean   = $this->normalize_bucharest_locality($county_name, $locality_raw);
 
             // Single cached call (since 1.0.13) — replaces the previous 2-step
             // check_service() + get_tariff() pattern. Cache HIT returns ~1ms;
@@ -207,43 +235,25 @@ class HGEZLPFCR_Shipping_Standard extends WC_Shipping_Method {
         if (!parent::is_available($package)) {
             return false;
         }
-        
-        // Check if we have required settings for API
-        $user = HGEZLPFCR_Settings::get('hgezlpfcr_user', '');
-        $client = HGEZLPFCR_Settings::get('hgezlpfcr_client', '');
-        if (empty($user) || empty($client)) {
-            // If no API credentials, allow fixed pricing only
-            $enable_dynamic = $this->get_instance_option('enable_dynamic_pricing', 'yes') === 'yes';
-            if ($enable_dynamic) {
-                return false; // Can't do dynamic pricing without credentials
-            }
-        }
-        
-        // If dynamic pricing is enabled and we have destination data, check service availability
-        $enable_dynamic = $this->get_instance_option('enable_dynamic_pricing', 'yes') === 'yes';
-        if ($enable_dynamic && !empty($package['destination']['city']) && !empty($user) && !empty($client)) {
-            try {
-                $api = new HGEZLPFCR_API_Client();
-                $check = $api->check_service([
-                    'service' => 'Standard',
-                    'county' => $package['destination']['state'] ?? '',
-                    'locality' => $package['destination']['city'] ?? '',
-                    'weight' => $this->calculate_package_weight($package),
-                    'length' => 30,
-                    'width' => 20,
-                    'height' => 10,
-                ]);
 
-                if (is_wp_error($check) || empty($check['available'])) {
-                    HGEZLPFCR_Logger::log('Service not available for destination', $package['destination']);
-                    return false;
-                }
-            } catch (Exception $e) {
-                HGEZLPFCR_Logger::error('Service availability check failed', ['exception' => $e->getMessage()]);
-                // Fall back to fixed pricing if API check fails
-            }
+        // Credential gate for dynamic pricing — when dynamic is enabled but
+        // credentials are missing, hide the method (we cannot calculate a
+        // real tariff). Fixed pricing works without credentials.
+        $user           = HGEZLPFCR_Settings::get('hgezlpfcr_user', '');
+        $client         = HGEZLPFCR_Settings::get('hgezlpfcr_client', '');
+        $enable_dynamic = $this->get_instance_option('enable_dynamic_pricing', 'yes') === 'yes';
+        if ($enable_dynamic && (empty($user) || empty($client))) {
+            return false;
         }
-        
+
+        // No live API check here — that was duplicating work from
+        // calculate_shipping() and (until 1.0.13) bypassed the 1nq county
+        // mapping + djo cache wrapper, causing the method to disappear
+        // entirely on any FC API hiccup (HTTP 422/500/timeout). The
+        // cached wrapper inside get_dynamic_cost() already handles the
+        // availability decision (cost 0 -> fall back to fixed pricing in
+        // calculate_shipping()). Matches FC Pro's lighter is_available()
+        // pattern.
         return true;
     }
     
@@ -298,12 +308,27 @@ class HGEZLPFCR_Shipping_Standard extends WC_Shipping_Method {
     }
     
     protected function calculate_package_weight($package) {
+        // Match the official FC plugin: ignore virtual products, normalize
+        // WC's configured weight unit (g/lb/oz) to kg via wc_get_weight(),
+        // then round to integer with a 1 kg floor. FC's /get-tariff and
+        // /get-tariff-new return HTTP 500 "Server Error" for sub-kg float
+        // weights like 0.1 — they expect integer kilograms. Pre-1.0.13
+        // we sent the raw float, which caused every cart calculation to
+        // burn 3× retries before falling back to the configured fixed cost.
         $weight = 0;
-        foreach ($package['contents'] as $item) {
-            $product = $item['data'];
-            $product_weight = (float) $product->get_weight();
-            $weight += $product_weight * $item['quantity'];
+        $contents = isset($package['contents']) && is_array($package['contents']) ? $package['contents'] : [];
+        foreach ($contents as $item) {
+            if (!isset($item['data']) || !is_object($item['data']) || $item['data']->is_virtual()) {
+                continue;
+            }
+            $raw = (float) $item['data']->get_weight();
+            if ($raw <= 0) {
+                continue;
+            }
+            $kg = (float) wc_get_weight($raw, 'kg');
+            $weight += $kg * (int) ($item['quantity'] ?? 1);
         }
-        return max($weight, 0.1); // minimum 0.1 kg
+        $rounded = (int) round($weight);
+        return $rounded < 1 ? 1 : $rounded;
     }
 }

@@ -78,14 +78,22 @@ class HGEZLPFCR_API_Client {
                 }
 
                 if ($code >= 200 && $code < 300) {
-                    // Try to decode as JSON
+                    // FC's /check-service endpoint returns just "1" (available)
+                    // or "0" (not available) as the response body. json_decode
+                    // happily parses "1" as the integer 1 (valid JSON!) and
+                    // json_last_error() returns JSON_ERROR_NONE — so a naive
+                    // "decode + return" would yield an int that callers expecting
+                    // an array misinterpret as ['available' => null]. Treat any
+                    // non-array decode the same as a non-JSON response: wrap it
+                    // with the raw body + a parsed 'available' flag so callers
+                    // get a consistent shape. (Pre-1.0.13 silent bug — surfaced
+                    // once 1nq made check-service actually reach the API with
+                    // valid county/locality values.)
                     $data = json_decode($raw, true);
-                    if (json_last_error() === JSON_ERROR_NONE) {
+                    if (json_last_error() === JSON_ERROR_NONE && is_array($data)) {
                         return $data;
-                    } else {
-                        // Return raw response for non-JSON responses
-                        return ['raw' => $raw, 'available' => $raw == '1'];
                     }
+                    return ['raw' => $raw, 'available' => $raw == '1'];
                 }
                 // 429/5xx => retry
                 if (!in_array($code, [429,500,502,503,504], true)) {
@@ -798,81 +806,435 @@ class HGEZLPFCR_API_Client {
         set_transient($cache_key, $awb_set, 5 * MINUTE_IN_SECONDS);
     }
     
+    /**
+     * Calculate tariff for an internal (Romania) shipment.
+     *
+     * Since 1.0.13 this targets the OFFICIAL FAN Courier reports endpoint
+     * at https://api.fancourier.ro/reports/awb/internal-tariff — the legacy
+     * https://ecommerce.fancourier.ro/get-tariff(-new) endpoints are
+     * deprecated server-side and return HTTP 500 for every request on
+     * production accounts (confirmed by ~6000-line dev1 log on 2026-05-23
+     * with zero successful tariff responses across both endpoints).
+     *
+     * Auth flow: Bearer token from /login (api.fancourier.ro), same token
+     * already used for AWB generation. clientId comes from the
+     * hgezlpfcr_client setting.
+     *
+     * Request shape: POST with JSON body. FC's Postman docs show GET
+     * with a JSON body, but WordPress's HTTP transport cannot send that
+     * combination cleanly (GET+body=string fatals in WpOrg\Requests\
+     * Transport\Curl::format_get; GET+body=array silently drops the body
+     * via http_build_query without producing a response — confirmed
+     * twice on dev1). FC's Laravel-based router accepts POST for these
+     * endpoints in practice, and POST+JSON is the verb every REST tool
+     * actually uses on the FC support channels.
+     *
+     * Body (JSON):
+     *   {
+     *     "clientId": 7032158,
+     *     "info": {
+     *       "service": "Standard",
+     *       "payment": "expeditor",
+     *       "weight": 1,
+     *       "options": [],
+     *       "dimensions": {"length": 30, "width": 20, "height": 10},
+     *       "packages": {"parcel": 1, "envelope": 0},
+     *       "declaredValue": null
+     *     },
+     *     "recipient": {"locality": "Bucuresti", "county": "Bucuresti"}
+     *   }
+     *
+     * Service names accepted by FC (caller passes via $params['service']):
+     *   "Standard", "Cont Colector", "FANbox", "Express Loco", "RedCode",
+     *   "Collect Point PayPoint", "Collect Point OMV", "Produse Albe".
+     *   Legacy callers passing $params['serviceTypeId'] (numeric) are
+     *   mapped back via $service_id_to_name; unknown ids fall through to
+     *   the supplied $params['service'] string.
+     *
+     * @param array $params service|serviceTypeId, county, locality, weight,
+     *                      length, width, height, declared_value (optional)
+     * @return array|WP_Error On success: ['price' => float].
+     *                        WP_Error on auth, transport, 4xx, or parse.
+     * @since 1.0.13 — endpoint migration
+     */
     public function get_tariff(array $params) {
-        // Use eCommerce API endpoint for tariff calculation
-        $endpoint = 'https://ecommerce.fancourier.ro/get-tariff';
+        $endpoint = 'https://api.fancourier.ro/reports/awb/internal-tariff';
 
-        // Map service name to serviceTypeId
-        $service_map = [
-            'Standard' => 1,
-            'Cont Colector' => 4,
-            'FANbox' => 27,
-            'FANbox COD' => 28,
-            'Express Loco' => 3,
-            'Red Code' => 7,
+        // Resolve service name. Prefer the caller-supplied string; if only
+        // a numeric serviceTypeId was passed (legacy callers), map it.
+        //
+        // Authoritative source: HGEZLPFCR_Pro_API::get_service_map() — the
+        // PRO plugin owns the canonical service list and IDs because PRO
+        // touches the extended services (Express Loco, RedCode, etc.) that
+        // Standard alone doesn't expose. Keep these two maps in sync.
+        // COD-variant IDs collapse to the same service-name string (COD is
+        // a payment option on FC's side, not a separate service).
+        $service_id_to_name = [
+            1  => 'Standard',
+            2  => 'RedCode',
+            3  => 'Export',
+            4  => 'Cont Colector',
+            5  => 'Express Loco',
+            6  => 'Collect Point OMV',
+            7  => 'Collect Point PayPoint',
+            9  => 'RedCode',                 // COD variant of 2
+            10 => 'Express Loco',            // COD variant of 5
+            11 => 'Collect Point OMV',       // COD variant of 6
+            12 => 'Collect Point PayPoint',  // COD variant of 7
+            13 => 'Produse Albe',
+            14 => 'Produse Albe',            // COD variant of 13
+            27 => 'FANbox',
+            28 => 'FANbox',                  // COD variant of 27
         ];
-
-        // Allow direct serviceTypeId to be passed (used by PRO plugin for extended services)
-        if (isset($params['serviceTypeId']) && is_numeric($params['serviceTypeId'])) {
-            $service_type_id = (int) $params['serviceTypeId'];
+        if (!empty($params['service'])) {
+            $service_name = (string) $params['service'];
+        } elseif (isset($params['serviceTypeId']) && is_numeric($params['serviceTypeId'])) {
+            $sid = (int) $params['serviceTypeId'];
+            $service_name = $service_id_to_name[$sid] ?? 'Standard';
         } else {
-            $service_name = $params['service'] ?? 'Standard';
-            $service_type_id = $service_map[$service_name] ?? 1;
+            $service_name = 'Standard';
         }
 
-        // Build eCommerce API request body
-        $body = [
-            'serviceTypeId' => $service_type_id,
-            'recipientCounty' => $params['county'] ?? '',
-            'recipientLocality' => $params['locality'] ?? '',
-            'weight' => $params['weight'] ?? 1,
-            'length' => $params['length'] ?? 1,
-            'width' => $params['width'] ?? 1,
-            'height' => $params['height'] ?? 1,
+        // Auth via the official /login Bearer token (same flow as AWB).
+        $token = $this->get_old_api_token();
+        if (!$token) {
+            HGEZLPFCR_Logger::error('Get tariff: could not obtain auth token', [
+                'has_user' => !empty($this->user),
+                'has_pass' => !empty($this->pass),
+            ]);
+            return new WP_Error(
+                'hgezlpfcr_auth_failed',
+                __('Could not authenticate with FAN Courier (verify username/password in Settings).', 'hge-zone-de-livrare-pentru-fan-courier-romania')
+            );
+        }
+
+        // clientId is REQUIRED on the reports endpoint.
+        $client_id = (int) HGEZLPFCR_Settings::get('hgezlpfcr_client', 0);
+        if ($client_id <= 0) {
+            HGEZLPFCR_Logger::error('Get tariff: hgezlpfcr_client (Client ID) not configured');
+            return new WP_Error(
+                'hgezlpfcr_missing_client_id',
+                __('FAN Courier Client ID is not configured. Set it in WooCommerce > Settings > FAN Courier.', 'hge-zone-de-livrare-pentru-fan-courier-romania')
+            );
+        }
+
+        // Defensive: bail out before hitting the API when the destination
+        // is incomplete. The shipping-method calculator already guards
+        // against this, but other callers (Pro FANBox cookie path, future
+        // third-party integrations) may invoke get_tariff() directly. FC
+        // would respond with HTTP 422 "Perechea judet-localitate
+        // introdusa este incorecta" anyway — surface a clearer WP_Error
+        // and skip the 4-second retry burn.
+        $county_raw   = trim((string) ($params['county']   ?? ''));
+        $locality_raw = trim((string) ($params['locality'] ?? ''));
+        if ($county_raw === '' || $locality_raw === '') {
+            return new WP_Error(
+                'hgezlpfcr_missing_destination',
+                __('County or locality missing from tariff request.', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
+                ['county' => $county_raw, 'locality' => $locality_raw]
+            );
+        }
+
+        // Weight must be a positive integer — FC's API rejects sub-kg
+        // floats with HTTP 500. The shipping-method calculator already
+        // rounds, but be defensive in case a different caller passes a
+        // float (e.g. PRO FANBox cookie-derived path).
+        $weight = (int) round((float) ($params['weight'] ?? 1));
+        if ($weight < 1) {
+            $weight = 1;
+        }
+
+        // Declared value: null = no insurance (FC's "no declaration"
+        // sentinel). Only send a positive number when set.
+        $declared = isset($params['declared_value']) ? (float) $params['declared_value'] : 0.0;
+        $declared_value = $declared > 0 ? $declared : null;
+
+        $body_data = [
+            'clientId' => $client_id,
+            'info'     => [
+                'service'       => $service_name,
+                'payment'       => 'expeditor', // RO term per FC docs; sender pays for tariff queries
+                'weight'        => $weight,
+                'options'       => [],
+                'dimensions'    => [
+                    'length' => (int) ($params['length'] ?? 30),
+                    'width'  => (int) ($params['width']  ?? 20),
+                    'height' => (int) ($params['height'] ?? 10),
+                ],
+                'packages'      => [
+                    'parcel'   => 1,
+                    'envelope' => 0,
+                ],
+                'declaredValue' => $declared_value,
+            ],
+            'recipient' => [
+                'locality' => $locality_raw,
+                'county'   => $county_raw,
+            ],
         ];
 
-        HGEZLPFCR_Logger::log('Get tariff request', [
+        // Why cURL directly instead of wp_remote_*():
+        //
+        // FC's reports/awb/internal-tariff endpoint strictly requires
+        // GET with a JSON body. The Laravel router explicitly responds
+        // with HTTP 405 "The POST method is not supported. Supported
+        // methods: GET, HEAD." for any other verb (confirmed empirically
+        // on dev1 — see Standard 1.0.13 changelog).
+        //
+        // WordPress's HTTP abstraction cannot send GET+body cleanly:
+        //   - body=string + method=GET  -> fatal in WpOrg\Requests\
+        //     Transport\Curl::format_get() ("http_build_query(): Argument
+        //     #1 must be of type array, string given").
+        //   - body=array  + method=GET  -> WP silently converts to
+        //     bracket-notation query string via http_build_query and
+        //     drops the body; FC does not process the resulting URL and
+        //     no response is logged.
+        //   - method=POST + JSON body   -> HTTP 405 from FC.
+        //
+        // So we drop to ext-curl directly. This is the same transport WP
+        // itself uses under the hood; we just keep control of the method
+        // + body combination instead of letting WP's wrappers second-guess
+        // us. Implementation is intentionally minimal — auth, SSL, and
+        // headers are explicit, and the response shape mirrors what
+        // wp_remote_retrieve_* gives us so the parsing code below didn't
+        // need to change.
+        $json_body = (string) wp_json_encode($body_data, JSON_UNESCAPED_UNICODE);
+        $headers_list = [
+            'Authorization: Bearer ' . $token,
+            'Content-Type: application/json',
+            'Accept: application/json',
+            'User-Agent: WooFanCourier/' . HGEZLPFCR_PLUGIN_VER . '; ' . home_url(),
+            'Content-Length: ' . strlen($json_body),
+        ];
+
+        HGEZLPFCR_Logger::log('Get tariff (reports endpoint) request', [
             'endpoint' => $endpoint,
-            'service' => $service_name,
-            'params' => $body
+            'service'  => $service_name,
+            'body'     => $body_data,
         ]);
 
-        $response = $this->post_form($endpoint, $body);
+        $attempt  = 0;
+        $delay_ms = 200;
+        $response = null;
 
-        // Parse response - eCommerce API returns JSON with tariff
-        if (is_wp_error($response)) {
-            return $response;
+        if (!function_exists('curl_init')) {
+            HGEZLPFCR_Logger::error('Get tariff: ext-curl not available');
+            return new WP_Error(
+                'hgezlpfcr_curl_unavailable',
+                __('PHP cURL extension is required for FAN Courier tariff queries.', 'hge-zone-de-livrare-pentru-fan-courier-romania')
+            );
         }
 
-        // Response format: {"tariff": 12.34}
-        if (isset($response['tariff'])) {
-            return ['price' => (float) $response['tariff']];
-        }
+        do {
+            $attempt++;
+            $code     = 0;
+            $raw      = '';
+            $curl_err = '';
+            $response = null; // reset stale WP_Error from previous iteration
+            $ch       = null;
 
-        // If raw response, try to decode
-        if (isset($response['raw'])) {
-            $data = json_decode($response['raw'], true);
-            if ($data && isset($data['tariff'])) {
-                return ['price' => (float) $data['tariff']];
+            // phpcs:disable WordPress.WP.AlternativeFunctions.curl_curl_init,WordPress.WP.AlternativeFunctions.curl_curl_setopt_array,WordPress.WP.AlternativeFunctions.curl_curl_exec,WordPress.WP.AlternativeFunctions.curl_curl_getinfo,WordPress.WP.AlternativeFunctions.curl_curl_error,WordPress.WP.AlternativeFunctions.curl_curl_close
+            // ---------------------------------------------------------------
+            // Direct ext-curl is REQUIRED here, not a preference.
+            // FC's /reports/awb/internal-tariff endpoint accepts ONLY GET
+            // (FC returns HTTP 405 for any other verb — verified on dev1)
+            // and requires the params as a JSON body in that GET request.
+            // WordPress's HTTP layer cannot send GET-with-body:
+            //   - body=string + method=GET -> http_build_query fatal in
+            //     WpOrg\Requests\Transport\Curl::format_get
+            //   - body=array  + method=GET -> body silently dropped, no
+            //     response surfaced (confirmed in dev1 logs line 6789)
+            //   - method=POST              -> FC API returns 405
+            // The ext-curl path below is the same transport WP uses
+            // internally — we just retain manual control of the verb +
+            // body combination.
+            // ---------------------------------------------------------------
+            try {
+                $ch = curl_init();
+                curl_setopt_array($ch, [
+                    CURLOPT_URL            => $endpoint,
+                    CURLOPT_CUSTOMREQUEST  => 'GET',     // FC requires GET
+                    CURLOPT_POSTFIELDS     => $json_body, // body even though method=GET (FC's quirk)
+                    CURLOPT_HTTPHEADER     => $headers_list,
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_TIMEOUT        => $this->timeout,
+                    CURLOPT_CONNECTTIMEOUT => 10,
+                    CURLOPT_SSL_VERIFYPEER => true,
+                    CURLOPT_SSL_VERIFYHOST => 2,
+                    CURLOPT_FOLLOWLOCATION => false,
+                ]);
+                $raw      = (string) curl_exec($ch);
+                $code     = (int)    curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                $curl_err = (string) curl_error($ch);
+                curl_close($ch);
+            } catch (\Throwable $e) {
+                HGEZLPFCR_Logger::error('Reports API threw exception', [
+                    'class'   => get_class($e),
+                    'message' => $e->getMessage(),
+                    'attempt' => $attempt,
+                ]);
+                if ($ch !== null) { @curl_close($ch); }
+                $response = new WP_Error('hgezlpfcr_tariff_exception', $e->getMessage());
             }
-        }
+            // phpcs:enable WordPress.WP.AlternativeFunctions.curl_curl_init,WordPress.WP.AlternativeFunctions.curl_curl_setopt_array,WordPress.WP.AlternativeFunctions.curl_curl_exec,WordPress.WP.AlternativeFunctions.curl_curl_getinfo,WordPress.WP.AlternativeFunctions.curl_curl_error,WordPress.WP.AlternativeFunctions.curl_curl_close
 
-        HGEZLPFCR_Logger::error('Invalid tariff response', ['response' => $response]);
-        return new WP_Error('fc_tariff_error', 'Invalid response from API for tariff');
+            if (!isset($response) || !is_wp_error($response)) {
+                if ($curl_err !== '') {
+                    HGEZLPFCR_Logger::error('Reports API cURL error', [
+                        'err'     => $curl_err,
+                        'attempt' => $attempt,
+                    ]);
+                    $response = new WP_Error('hgezlpfcr_tariff_curl', $curl_err);
+                }
+            }
+
+            if (is_wp_error($response)) {
+                HGEZLPFCR_Logger::error('Reports API HTTP error', [
+                    'err'     => $response->get_error_message(),
+                    'attempt' => $attempt,
+                ]);
+            } else {
+                HGEZLPFCR_Logger::log('Reports API response', [
+                    'url'  => $endpoint,
+                    'code' => $code,
+                    'raw'  => mb_strlen($raw) > 500 ? mb_substr($raw, 0, 500) . '…' : $raw,
+                ]);
+
+                // 401 — token expired; refresh once and retry.
+                if ($code === 401 && $attempt <= $this->retries) {
+                    delete_option('hgezlpfcr_old_api_token');
+                    delete_option('hgezlpfcr_old_api_token_expires');
+                    $token = $this->get_old_api_token();
+                    if ($token) {
+                        // Rewrite the Authorization line in the headers list
+                        foreach ($headers_list as $i => $h) {
+                            if (stripos($h, 'Authorization:') === 0) {
+                                $headers_list[$i] = 'Authorization: Bearer ' . $token;
+                                break;
+                            }
+                        }
+                        $response = null; // reset for next loop iteration
+                        continue;
+                    }
+                    return new WP_Error('hgezlpfcr_auth_failed', __('Token expired and could not be regenerated.', 'hge-zone-de-livrare-pentru-fan-courier-romania'), ['code' => $code]);
+                }
+
+                if ($code >= 200 && $code < 300) {
+                    $data = json_decode($raw, true);
+
+                    // FC's reports endpoints typically wrap payload in
+                    // {"data": ...}. Walk the common shapes defensively.
+                    $tariff = null;
+                    if (is_array($data)) {
+                        // Shape A: {"data": {"tariff": X}} or {"data": {"price": X}}
+                        if (isset($data['data']) && is_array($data['data'])) {
+                            foreach (['tariff', 'price', 'total', 'value'] as $k) {
+                                if (isset($data['data'][$k]) && is_numeric($data['data'][$k])) {
+                                    $tariff = (float) $data['data'][$k];
+                                    break;
+                                }
+                            }
+                            // Shape A nested: {"data": {"info": {"tariff": X}}}
+                            if ($tariff === null && isset($data['data']['info']) && is_array($data['data']['info'])) {
+                                foreach (['tariff', 'price', 'total'] as $k) {
+                                    if (isset($data['data']['info'][$k]) && is_numeric($data['data']['info'][$k])) {
+                                        $tariff = (float) $data['data']['info'][$k];
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        // Shape B (flat): {"tariff": X} or {"price": X}
+                        if ($tariff === null) {
+                            foreach (['tariff', 'price', 'total', 'value'] as $k) {
+                                if (isset($data[$k]) && is_numeric($data[$k])) {
+                                    $tariff = (float) $data[$k];
+                                    break;
+                                }
+                            }
+                        }
+                    } elseif (is_numeric($data)) {
+                        // Shape C: a bare number (FC's endpoint sometimes
+                        // returns raw scalars for legacy tariff calls).
+                        $tariff = (float) $data;
+                    }
+
+                    if ($tariff !== null && $tariff > 0) {
+                        return ['price' => $tariff];
+                    }
+
+                    HGEZLPFCR_Logger::error('Tariff response parsed but no price field found', [
+                        'parsed' => $data,
+                    ]);
+                    return new WP_Error(
+                        'hgezlpfcr_tariff_parse_failed',
+                        __('Could not extract tariff price from FAN Courier response.', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
+                        ['raw' => $raw]
+                    );
+                }
+
+                // 4xx — service typically not available for this destination,
+                // or bad request body. Don't retry; surface as WP_Error so
+                // the wrapper marks the destination unavailable.
+                if ($code >= 400 && $code < 500) {
+                    $error_msg = '';
+                    $data = json_decode($raw, true);
+                    if (is_array($data)) {
+                        if (isset($data['message']) && is_string($data['message'])) {
+                            $error_msg = $data['message'];
+                        } elseif (isset($data['errors']) && is_string($data['errors'])) {
+                            $error_msg = $data['errors'];
+                        }
+                    }
+                    return new WP_Error(
+                        'hgezlpfcr_tariff_unavailable',
+                        $error_msg !== ''
+                            ? $error_msg
+                            : sprintf(/* translators: %d HTTP code */ __('FAN Courier rejected the tariff request (HTTP %d).', 'hge-zone-de-livrare-pentru-fan-courier-romania'), $code),
+                        ['code' => $code, 'raw' => $raw]
+                    );
+                }
+
+                // 429 / 5xx — transient; retry with backoff.
+                HGEZLPFCR_Logger::error('Reports API transient error, retrying', [
+                    'code'    => $code,
+                    'attempt' => $attempt,
+                ]);
+            }
+
+            if ($attempt <= $this->retries) {
+                usleep($delay_ms * 1000);
+                $delay_ms = min($delay_ms * 2, 2000);
+            }
+        } while ($attempt <= $this->retries);
+
+        return is_wp_error($response)
+            ? $response
+            : new WP_Error('hgezlpfcr_tariff_failed', __('Could not communicate with FAN Courier reports API after retry.', 'hge-zone-de-livrare-pentru-fan-courier-romania'));
     }
     
     public function check_service(array $params) {
         // Use eCommerce API endpoint for service check
         $endpoint = 'https://ecommerce.fancourier.ro/check-service';
 
-        // Map service name to serviceTypeId
+        // Map service name to serviceTypeId.
+        // Kept aligned with HGEZLPFCR_Pro_API::get_service_map() (the
+        // canonical source). Standard 1.0.12 carried stale Express Loco=3
+        // (actually Export) and "Red Code"=7 (actually Collect Point
+        // PayPoint) values that quietly drifted apart; rewriting the map
+        // here so the legacy /check-service endpoint, if still reachable,
+        // calls the right service ID.
         $service_map = [
-            'Standard' => 1,
-            'Cont Colector' => 4,
-            'FANbox' => 27,
-            'FANbox COD' => 28,
-            'Express Loco' => 3,
-            'Red Code' => 7,
+            'Standard'               => 1,
+            'RedCode'                => 2,
+            'Export'                 => 3,
+            'Cont Colector'          => 4,
+            'Express Loco'           => 5,
+            'Collect Point OMV'      => 6,
+            'Collect Point PayPoint' => 7,
+            'Produse Albe'           => 13,
+            'FANbox'                 => 27,
+            'FANbox COD'             => 28,
         ];
 
         // Allow direct serviceTypeId to be passed (used by PRO plugin for extended services)
@@ -927,103 +1289,30 @@ class HGEZLPFCR_API_Client {
     }
 
     /**
-     * Combined availability + tariff lookup via FC's /get-tariff-new endpoint.
+     * @deprecated 1.0.13 The ecommerce.fancourier.ro/get-tariff-new
+     * endpoint returns HTTP 500 across all production accounts (confirmed
+     * empirically — see commit message and changelog for 1.0.13). All
+     * tariff queries now route through get_tariff(), which targets the
+     * official api.fancourier.ro/reports/awb/internal-tariff endpoint.
      *
-     * Single HTTP call that returns the price (and implicitly availability:
-     * a missing or non-200 'tariff' field means the service is unavailable
-     * for the destination). Cuts cache-MISS latency from ~4-5s (the legacy
-     * check_service + get_tariff pair) down to ~2-3s.
+     * This method is preserved as a thin shim so any third-party code
+     * still calling it continues to work — it just forwards to get_tariff()
+     * and adapts the return shape (the old method returned 'tariff' +
+     * 'extra_km_cost', the new endpoint returns just 'price'). extraKmCost
+     * is no longer available; callers depending on it should be migrated.
      *
-     * Body shape mirrors the official FAN Courier plugin
-     * (fan_courier-WooCommerce-9.X / get_tariff_new) so the response parsing
-     * stays compatible across accounts.
-     *
-     * @param array $params service, county, locality, weight, length, width, height, declared_value (optional), no_packages (optional, default 1), no_envelopes (optional, default 0), repayment (optional, default 0).
-     * @return array|WP_Error On success: ['tariff' => float, 'extra_km_cost' => float|null]. WP_Error on HTTP/parse failure or when the response lacks a tariff value.
-     * @since djo follow-up p3f (2026-05-23)
+     * @param array $params see get_tariff()
+     * @return array|WP_Error ['tariff' => float, 'extra_km_cost' => null] on success
      */
     public function get_tariff_new(array $params) {
-        $endpoint = 'https://ecommerce.fancourier.ro/get-tariff-new';
-
-        // Map service name to serviceTypeId (same map as get_tariff/check_service).
-        $service_map = [
-            'Standard'      => 1,
-            'Cont Colector' => 4,
-            'FANbox'        => 27,
-            'FANbox COD'    => 28,
-            'Express Loco'  => 3,
-            'Red Code'      => 7,
-        ];
-        if (isset($params['serviceTypeId']) && is_numeric($params['serviceTypeId'])) {
-            $service_type_id = (int) $params['serviceTypeId'];
-        } else {
-            $service_name    = $params['service'] ?? 'Standard';
-            $service_type_id = $service_map[$service_name] ?? 1;
+        HGEZLPFCR_Logger::log('get_tariff_new() called — deprecated since 1.0.13, forwarding to get_tariff()');
+        $result = $this->get_tariff($params);
+        if (is_wp_error($result)) {
+            return $result;
         }
-
-        $body = [
-            'serviceTypeId'     => $service_type_id,
-            'recipientCounty'   => $params['county']   ?? '',
-            'recipientLocality' => $params['locality'] ?? '',
-            'noPackages'        => isset($params['no_packages'])  ? (int) $params['no_packages']  : 1,
-            'noEnvelopes'       => isset($params['no_envelopes']) ? (int) $params['no_envelopes'] : 0,
-            'weight'            => $params['weight'] ?? 1,
-            'length'            => $params['length'] ?? 1,
-            'width'             => $params['width']  ?? 1,
-            'height'            => $params['height'] ?? 1,
-            'repayment'         => $params['repayment']      ?? 0,
-            'declaredValue'     => $params['declared_value'] ?? 0,
-            'options'           => $params['options']        ?? [],
-        ];
-
-        HGEZLPFCR_Logger::log('Get tariff (combined endpoint) request', [
-            'endpoint' => $endpoint,
-            'service'  => $params['service'] ?? 'Standard',
-            'params'   => $body,
-        ]);
-
-        $response = $this->post_form($endpoint, $body);
-        if (is_wp_error($response)) {
-            return $response;
-        }
-
-        // Response shape: {"tariff": 12.34, "extraKmCost": 0.0} or raw scalar.
-        $tariff        = null;
-        $extra_km_cost = null;
-
-        if (isset($response['tariff']) && is_numeric($response['tariff'])) {
-            $tariff = (float) $response['tariff'];
-        }
-        if (isset($response['extraKmCost']) && is_numeric($response['extraKmCost'])) {
-            $extra_km_cost = (float) $response['extraKmCost'];
-        }
-
-        // Fallback parsing for raw responses (the post_form() helper sometimes
-        // returns the raw string under 'raw' if it couldn't json-decode).
-        if ($tariff === null && isset($response['raw'])) {
-            $decoded = json_decode($response['raw'], true);
-            if (is_array($decoded)) {
-                if (isset($decoded['tariff']) && is_numeric($decoded['tariff'])) {
-                    $tariff = (float) $decoded['tariff'];
-                }
-                if (isset($decoded['extraKmCost']) && is_numeric($decoded['extraKmCost'])) {
-                    $extra_km_cost = (float) $decoded['extraKmCost'];
-                }
-            } elseif (is_numeric($response['raw'])) {
-                $tariff = (float) $response['raw'];
-            }
-        }
-
-        if ($tariff === null) {
-            HGEZLPFCR_Logger::log('Combined endpoint returned no tariff (service unavailable or unsupported account)', [
-                'response_keys' => is_array($response) ? array_keys($response) : 'non-array',
-            ]);
-            return new WP_Error('fc_tariff_new_unavailable', 'Combined endpoint did not return a tariff for this destination');
-        }
-
         return [
-            'tariff'        => $tariff,
-            'extra_km_cost' => $extra_km_cost,
+            'tariff'        => (float) ($result['price'] ?? 0),
+            'extra_km_cost' => null,
         ];
     }
 
@@ -1031,14 +1320,18 @@ class HGEZLPFCR_API_Client {
      * Combined availability + tariff lookup with 5-minute transient cache.
      *
      * Mirror of the FC Pro pattern at class-hgezlpfcr-pro-shipping-base.php:454-489.
-     * Reduces the per-package checkout cost from 2 sync HTTP calls (~4-10s) to
-     * a single transient read (~1ms) on cache hit. On cache miss, runs the
-     * same 2 HTTP calls as the previous behaviour and caches the combined
-     * result for 5 minutes — including the "not available" outcome, which
-     * prevents API stampede for unsupported destinations.
+     * Reduces the per-package checkout cost from 1 sync HTTP call (~2-3s
+     * post-migration) to a single transient read (~1ms) on cache hit.
+     * On cache miss runs a single call to the official reports endpoint
+     * via get_tariff() and caches the combined result for 5 minutes —
+     * including the "not available" outcome, which prevents API stampede
+     * for unsupported destinations.
      *
      * Cache key is hgezlpfcr_twa_ + md5(service|county|locality|weight_bucket).
-     * Weight is rounded to the nearest 0.5kg so e.g. 1.1kg and 1.4kg share a
+     * Weight bucket = round(weight*2)/2 (0.5kg granularity). Since 1.0.13
+     * the upstream weight from calculate_package_weight() is always an
+     * integer (1, 2, 3, ...), so the bucket math reduces to a no-op — kept
+     * as-is for compat with any caller that still passes a float weight.
      * cache bucket (1.5kg). Identical key shape to FC Pro for future
      * extraction into a shared helper.
      *
@@ -1065,48 +1358,31 @@ class HGEZLPFCR_API_Client {
             return $cached;
         }
 
-        // Cache MISS — try the combined /get-tariff-new endpoint first
-        // (single HTTP), with a graceful fallback to the legacy 2-call pair
-        // (check_service + get_tariff) for accounts/cases where the combined
-        // endpoint isn't supported. Cuts MISS latency ~4-5s → ~2-3s when
-        // the new endpoint succeeds; never slower than legacy on fallback.
-        $combined = $this->get_tariff_new($params);
+        // Cache MISS — single call to the FC reports endpoint via get_tariff().
+        // Since 1.0.13 get_tariff() targets api.fancourier.ro/reports/awb/internal-tariff
+        // (the official current endpoint). The legacy 2-step pattern
+        // (check_service + get_tariff on ecommerce.fancourier.ro) has been
+        // removed entirely — that endpoint family returns HTTP 500 on
+        // production accounts and is effectively deprecated.
+        //
+        // A 4xx from the new endpoint means the destination is not
+        // serviceable (FC's own "service not available" signal); a 5xx
+        // means a real transient outage (already retried inside
+        // get_tariff()). Either way, no point burning extra calls.
+        $tariff = $this->get_tariff($params);
 
-        if (!is_wp_error($combined) && isset($combined['tariff']) && is_numeric($combined['tariff'])) {
+        if (!is_wp_error($tariff) && isset($tariff['price']) && $tariff['price'] > 0) {
             $result = [
                 'available' => true,
-                'price'     => (float) $combined['tariff'],
+                'price'     => (float) $tariff['price'],
                 'error'     => null,
             ];
         } else {
-            // Fallback path — legacy 2-call sequence. Identical to pre-p3f behaviour.
-            HGEZLPFCR_Logger::log('Combined endpoint unavailable — falling back to legacy 2-call pattern', [
-                'error' => is_wp_error($combined) ? $combined->get_error_message() : 'no_tariff_in_response',
-            ]);
-
-            $availability = $this->check_service($params);
-            if (is_wp_error($availability) || empty($availability['available'])) {
-                $result = [
-                    'available' => false,
-                    'price'     => 0.0,
-                    'error'     => is_wp_error($availability) ? $availability->get_error_message() : null,
-                ];
-            } else {
-                $tariff = $this->get_tariff($params);
-                if (is_wp_error($tariff)) {
-                    $result = [
-                        'available' => false,
-                        'price'     => 0.0,
-                        'error'     => $tariff->get_error_message(),
-                    ];
-                } else {
-                    $result = [
-                        'available' => true,
-                        'price'     => (float) ($tariff['price'] ?? 0),
-                        'error'     => null,
-                    ];
-                }
-            }
+            $result = [
+                'available' => false,
+                'price'     => 0.0,
+                'error'     => is_wp_error($tariff) ? $tariff->get_error_message() : 'No tariff returned',
+            ];
         }
 
         set_transient($cache_key, $result, 5 * MINUTE_IN_SECONDS);
@@ -1119,6 +1395,176 @@ class HGEZLPFCR_API_Client {
         ]);
 
         return $result;
+    }
+
+    /**
+     * Validate the configured (or supplied) Old API credentials by POSTing
+     * them to https://api.fancourier.ro/login and checking whether FC
+     * issues a token. This is the same endpoint that AWB generation uses,
+     * so a green light here means the user is safe at AWB time.
+     *
+     * eCommerce API auth (authShop) uses the WP site_url() as identity
+     * and does NOT rely on username/password — it cannot detect a wrong
+     * username. So tariff/check-service can keep working while AWB
+     * generation silently breaks. Pre-1.0.13 the plugin only discovered
+     * bad credentials at the first AWB generation, which is far too late.
+     *
+     * Designed to be safe to call from an update_option hook:
+     *  - 8-second timeout (admin save stays responsive)
+     *  - Network failures are reported as 'unknown' (not 'invalid') so a
+     *    transient outage doesn't blame the user
+     *  - Returns a structured result for the caller to persist + surface
+     *
+     * @param string|null $username Override (default: hgezlpfcr_user option)
+     * @param string|null $password Override (default: hgezlpfcr_pass option)
+     * @return array {
+     *     @type bool|null $valid true=verified ok, false=rejected by API,
+     *                            null=could not determine (network/5xx)
+     *     @type int       $code  HTTP code returned (0 if no response)
+     *     @type string    $error Empty when $valid=true; otherwise a short
+     *                            human-readable reason
+     * }
+     * @since 1.0.13
+     */
+    public function verify_old_api_credentials($username = null, $password = null): array {
+        $user = $username !== null ? (string) $username : (string) $this->user;
+        $pass = $password !== null ? (string) $password : (string) $this->pass;
+
+        if ($user === '' || $pass === '') {
+            return [
+                'valid' => false,
+                'code'  => 0,
+                'error' => __('Username or password is empty.', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
+            ];
+        }
+
+        $args = [
+            'timeout' => 8,
+            'headers' => [
+                'Content-Type' => 'application/json',
+                'User-Agent'   => 'WooFanCourier/' . HGEZLPFCR_PLUGIN_VER . '; ' . home_url(),
+            ],
+            'body'      => wp_json_encode([
+                'username' => $user,
+                'password' => $pass,
+            ]),
+            'sslverify' => true,
+        ];
+
+        $response = wp_remote_post('https://api.fancourier.ro/login', $args);
+
+        if (is_wp_error($response)) {
+            return [
+                'valid' => null,
+                'code'  => 0,
+                'error' => sprintf(
+                    /* translators: %s: WP HTTP error message */
+                    __('Could not reach FAN Courier API: %s', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
+                    $response->get_error_message()
+                ),
+            ];
+        }
+
+        $code = (int) wp_remote_retrieve_response_code($response);
+        $body = wp_remote_retrieve_body($response);
+        $data = json_decode($body, true);
+
+        if ($code === 200 && is_array($data) && !empty($data['data']['token'])) {
+            return [
+                'valid' => true,
+                'code'  => 200,
+                'error' => '',
+            ];
+        }
+
+        if ($code === 401 || $code === 403) {
+            return [
+                'valid' => false,
+                'code'  => $code,
+                'error' => __('Username or password rejected by FAN Courier.', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
+            ];
+        }
+
+        if ($code >= 500 && $code < 600) {
+            return [
+                'valid' => null,
+                'code'  => $code,
+                'error' => sprintf(
+                    /* translators: %d: HTTP status code */
+                    __('FAN Courier API temporarily unavailable (HTTP %d). Will retry on next save.', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
+                    $code
+                ),
+            ];
+        }
+
+        // Anything else (400, unexpected JSON, etc.) — treat as invalid + report code
+        return [
+            'valid' => false,
+            'code'  => $code,
+            'error' => sprintf(
+                /* translators: %d: HTTP status code */
+                __('Unexpected response from FAN Courier (HTTP %d).', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
+                $code
+            ),
+        ];
+    }
+
+    /**
+     * Hook target for credential changes. Re-validates against the Old API
+     * and stores the verdict so the admin notice + Settings page can
+     * surface it. Also clears the tariff cache (existing behaviour kept).
+     *
+     * Idempotent — safe to call multiple times. Skips when the credentials
+     * didn't actually change.
+     *
+     * @since 1.0.13
+     */
+    public static function on_credentials_changed($old_value, $new_value): void {
+        if ((string) $old_value === (string) $new_value) {
+            return;
+        }
+
+        self::clear_tariff_cache();
+
+        // Drop both cached auth tokens so the new credentials get a fresh
+        // round-trip the next time anything tries to use them:
+        //   - Old API token (api.fancourier.ro/login) — used for AWB
+        //     generation, tracking, PDF download.
+        //   - eCommerce API token (ecommerce.fancourier.ro/authShop) —
+        //     used for tariff queries, service availability checks. This
+        //     one is domain-based (no username/password sent), but a
+        //     credential change is the strongest signal we have that the
+        //     admin is re-binding the install to a different FC account,
+        //     so a stale 24-hour-cached token from the old account would
+        //     be misleading.
+        delete_option('hgezlpfcr_old_api_token');
+        delete_option('hgezlpfcr_old_api_token_expires');
+        delete_option('hgezlpfcr_api_token');
+        delete_option('hgezlpfcr_api_token_expires');
+
+        $api    = new self();
+        $result = $api->verify_old_api_credentials();
+
+        update_option('hgezlpfcr_credentials_valid', $result['valid'] === true
+            ? 'yes'
+            : ($result['valid'] === false ? 'no' : 'unknown'));
+        update_option('hgezlpfcr_credentials_checked_at', time());
+        update_option('hgezlpfcr_credentials_last_error', (string) $result['error']);
+        update_option('hgezlpfcr_credentials_last_code', (int) $result['code']);
+
+        // One-shot transient so the next admin page load can show a fresh
+        // success/failure notice right above the WC settings form, in
+        // addition to the persistent banner from admin_notices.
+        set_transient('hgezlpfcr_credentials_save_notice', [
+            'valid' => $result['valid'],
+            'error' => $result['error'],
+        ], 30);
+
+        HGEZLPFCR_Logger::log('Credentials revalidated after change', [
+            'valid' => $result['valid'],
+            'code'  => $result['code'],
+            'error' => $result['error'],
+        ]);
     }
 
     /**
@@ -1141,29 +1587,114 @@ class HGEZLPFCR_API_Client {
 }
 
 // -----------------------------------------------------------------------------
-// Tariff-cache invalidation hooks (since 1.0.13)
+// Credential-change hooks (since 1.0.13)
 //
-// Auto-invalidate on credential rotation: when the FC eCommerce API user or
-// password changes in Settings, the cached tariffs are blown away. Prices
-// don't actually depend on credentials (they're keyed on destination +
-// weight), but a credential change typically means a new account / sandbox
-// switch, and stale cache could mask configuration mistakes.
+// On any user/pass change:
+//   1. Wipe cached tariffs (they're keyed on destination + weight, not on
+//      credentials, but a credential change typically means a different
+//      FC account / sandbox switch and stale cache could mask config
+//      mistakes).
+//   2. Drop the cached Old API token — new credentials need a fresh
+//      /login round-trip.
+//   3. Validate the new credentials against /login (Old API). The
+//      eCommerce API uses domain-based auth and CANNOT detect a wrong
+//      username, so the plugin used to discover bad credentials only on
+//      first AWB generation — far too late. We now save the verdict in
+//      options + show a persistent admin notice when invalid.
 //
-// Each setting is its own option (HGEZLPFCR_Settings::get reads individual
-// keys), so we hook the per-option update_option_<key> action for the two
-// credentials that auth the API client.
+// Each Settings field is stored as its own option, so we hook the
+// per-option update_option_<key> action for both halves of the pair.
 // -----------------------------------------------------------------------------
-add_action('update_option_hgezlpfcr_user', static function ($old_value, $new_value) {
-    if ((string) $old_value !== (string) $new_value) {
-        HGEZLPFCR_API_Client::clear_tariff_cache();
-    }
+add_action('update_option_hgezlpfcr_user', [HGEZLPFCR_API_Client::class, 'on_credentials_changed'], 10, 2);
+add_action('update_option_hgezlpfcr_pass', [HGEZLPFCR_API_Client::class, 'on_credentials_changed'], 10, 2);
+
+// First-write variants — update_option_<key> only fires when the option
+// already exists. add_option_<key> fires on the very first save (when the
+// user is configuring the plugin for the first time and the option row
+// doesn't exist yet). Without this hook, the inaugural credential save
+// silently bypassed validation.
+add_action('add_option_hgezlpfcr_user', static function ($option, $value) {
+    HGEZLPFCR_API_Client::on_credentials_changed('', $value);
+}, 10, 2);
+add_action('add_option_hgezlpfcr_pass', static function ($option, $value) {
+    HGEZLPFCR_API_Client::on_credentials_changed('', $value);
 }, 10, 2);
 
-add_action('update_option_hgezlpfcr_pass', static function ($old_value, $new_value) {
-    if ((string) $old_value !== (string) $new_value) {
-        HGEZLPFCR_API_Client::clear_tariff_cache();
+// Persistent admin notice when the most recent credential check failed.
+// Dismissable per page-load is intentional: we don't want admins to dismiss
+// it forever and forget — it re-appears until the verdict flips to 'yes'.
+add_action('admin_notices', static function () {
+    if (!current_user_can('manage_woocommerce')) {
+        return;
     }
-}, 10, 2);
+    $valid = get_option('hgezlpfcr_credentials_valid', '');
+    if ($valid !== 'no') {
+        return; // Skip when valid, unknown, or never checked.
+    }
+    $error    = (string) get_option('hgezlpfcr_credentials_last_error', '');
+    $code     = (int) get_option('hgezlpfcr_credentials_last_code', 0);
+    $checked  = (int) get_option('hgezlpfcr_credentials_checked_at', 0);
+    $settings_url = admin_url('admin.php?page=wc-settings&tab=hgezlpfcr');
+
+    echo '<div class="notice notice-error"><p><strong>';
+    echo esc_html__('FAN Courier:', 'hge-zone-de-livrare-pentru-fan-courier-romania');
+    echo '</strong> ';
+    echo esc_html__('Datele de autentificare la FAN Courier sunt invalide. Generarea de AWB nu va funcționa.', 'hge-zone-de-livrare-pentru-fan-courier-romania');
+    if ($error !== '') {
+        echo ' <em>' . esc_html($error) . '</em>';
+    }
+    if ($code !== 0) {
+        echo ' <span style="color:#888;">(HTTP ' . esc_html((string) $code) . ')</span>';
+    }
+    if ($checked > 0) {
+        echo ' <span style="color:#888;">' . esc_html(sprintf(
+            /* translators: %s: human-friendly time difference (e.g. "5 minutes ago") */
+            __('Verificat ultima dată acum %s.', 'hge-zone-de-livrare-pentru-fan-courier-romania'),
+            human_time_diff($checked, time())
+        )) . '</span>';
+    }
+    echo ' <a href="' . esc_url($settings_url) . '">';
+    echo esc_html__('Verifică Settings &rarr;', 'hge-zone-de-livrare-pentru-fan-courier-romania');
+    echo '</a></p></div>';
+});
+
+// One-shot post-save banner. Fires immediately after WC settings redirect
+// so the admin sees explicit confirmation that the credentials they just
+// typed actually work (or don't). Backs up the persistent notice above.
+add_action('admin_notices', static function () {
+    if (!current_user_can('manage_woocommerce')) {
+        return;
+    }
+    $data = get_transient('hgezlpfcr_credentials_save_notice');
+    if (!is_array($data)) {
+        return;
+    }
+    delete_transient('hgezlpfcr_credentials_save_notice');
+
+    if ($data['valid'] === true) {
+        echo '<div class="notice notice-success is-dismissible"><p><strong>';
+        echo esc_html__('FAN Courier:', 'hge-zone-de-livrare-pentru-fan-courier-romania');
+        echo '</strong> ';
+        echo esc_html__('Credențialele au fost validate cu succes împotriva FAN Courier API.', 'hge-zone-de-livrare-pentru-fan-courier-romania');
+        echo '</p></div>';
+        return;
+    }
+    if ($data['valid'] === false) {
+        echo '<div class="notice notice-error is-dismissible"><p><strong>';
+        echo esc_html__('FAN Courier:', 'hge-zone-de-livrare-pentru-fan-courier-romania');
+        echo '</strong> ';
+        echo esc_html__('Credențialele NU au fost acceptate de FAN Courier:', 'hge-zone-de-livrare-pentru-fan-courier-romania');
+        echo ' ' . esc_html((string) $data['error']);
+        echo '</p></div>';
+        return;
+    }
+    // $data['valid'] === null — couldn't determine; don't alarm the user.
+    echo '<div class="notice notice-warning is-dismissible"><p><strong>';
+    echo esc_html__('FAN Courier:', 'hge-zone-de-livrare-pentru-fan-courier-romania');
+    echo '</strong> ';
+    echo esc_html__('Nu am putut verifica credențialele acum (rețea / FAN Courier API indisponibil). Voi reîncerca la următoarea salvare.', 'hge-zone-de-livrare-pentru-fan-courier-romania');
+    echo '</p></div>';
+});
 
 // -----------------------------------------------------------------------------
 // Manual cache clear via admin-post (since 1.0.13)
